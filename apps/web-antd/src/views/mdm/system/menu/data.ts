@@ -1,4 +1,6 @@
-export function useColumns() {
+import type { VxeGridProps } from '#/adapter/vxe-table';
+
+export function useColumns(): VxeGridProps<any>['columns'] {
   return [
     { type: 'seq', width: 50 },
     { field: 'title', title: '菜单标题', minWidth: 200, treeNode: true },

@@ -11,7 +11,10 @@ const emit = defineEmits(['success']);
 const currentData = ref<any>(null);
 
 const getTitle = computed(() => {
-  return currentData.value?.id ? '编辑主数据记录' : '新增主数据记录';
+  const masterDataTitle = currentData.value?.masterDataTitle || '主数据';
+  return currentData.value?.id
+    ? `编辑${masterDataTitle}`
+    : `新增${masterDataTitle}`;
 });
 
 const [Form, formApi] = useVbenForm({
@@ -25,8 +28,7 @@ const [Modal, modalApi] = useVbenModal({
     const { valid } = await formApi.validate();
     if (valid) {
       modalApi.lock();
-      const values = await formApi.getValues();
-      console.log('Record values:', values);
+      await formApi.getValues();
       setTimeout(() => {
         modalApi.lock(false);
         modalApi.close();

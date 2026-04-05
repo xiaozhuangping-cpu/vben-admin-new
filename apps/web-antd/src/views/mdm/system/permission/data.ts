@@ -1,4 +1,6 @@
-export function useColumns() {
+import type { VxeGridProps } from '#/adapter/vxe-table';
+
+export function useColumns(): VxeGridProps<any>['columns'] {
   return [
     { type: 'checkbox', width: 50 },
     { field: 'name', title: '权限名', minWidth: 180, treeNode: true },

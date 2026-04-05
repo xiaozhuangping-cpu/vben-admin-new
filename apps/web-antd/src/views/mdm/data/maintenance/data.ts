@@ -9,7 +9,7 @@ export const useColumns = (): VxeGridProps<any>['columns'] => [
   {
     field: 'status',
     slots: { default: 'status' },
-    title: '生校状态',
+    title: '生效状态',
     width: 100,
   },
   { field: 'createBy', title: '创建人', width: 100 },

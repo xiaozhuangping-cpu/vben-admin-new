@@ -3,7 +3,9 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { Page } from '@vben/common-ui';
 import { Button, message, Space, Tag } from 'ant-design-vue';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { h, ref } from 'vue';
+
+import { MASTER_DATA_ITEMS } from '#/views/mdm/data/shared/master-data';
+
 import { useColumns } from './data';
 
 const MOCK_MENUS = [
@@ -73,15 +75,32 @@ const MOCK_MENUS = [
   },
   {
     id: '3',
+    title: '主数据管理 | Data',
+    icon: 'lucide:layers',
+    path: '/mdm/data',
+    order: 110,
+    visible: true,
+    keepAlive: true,
+    children: MASTER_DATA_ITEMS.map((item, index) => ({
+      id: `3-${index + 1}`,
+      title: item.title,
+      path: item.path,
+      order: index + 1,
+      visible: true,
+      keepAlive: true,
+    })),
+  },
+  {
+    id: '4',
     title: '系统管理 | System',
     icon: 'lucide:settings',
     path: '/mdm/system',
-    order: 500,
+    order: 130,
     visible: true,
     keepAlive: true,
     children: [
       {
-        id: '3-1',
+        id: '4-1',
         title: '人员账号',
         path: '/mdm/system/user',
         order: 1,
@@ -89,7 +108,7 @@ const MOCK_MENUS = [
         keepAlive: true,
       },
       {
-        id: '3-2',
+        id: '4-2',
         title: '角色权限',
         path: '/mdm/system/role',
         order: 2,
@@ -112,7 +131,7 @@ const gridOptions: VxeGridProps<any> = {
   },
 };
 
-const [Grid, gridApi] = useVbenVxeGrid({
+const [Grid] = useVbenVxeGrid({
   gridOptions,
 });
 

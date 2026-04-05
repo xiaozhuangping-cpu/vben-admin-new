@@ -3,7 +3,9 @@ import type { VxeGridProps } from '#/adapter/vxe-table';
 import { Page } from '@vben/common-ui';
 import { Button, message, Space, Tag } from 'ant-design-vue';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { h, ref } from 'vue';
+
+import { MASTER_DATA_ITEMS } from '#/views/mdm/data/shared/master-data';
+
 import { useColumns } from './data';
 
 const MOCK_PERMISSIONS = [
@@ -44,22 +46,16 @@ const MOCK_PERMISSIONS = [
     type: 'dir',
     path: '/mdm/data',
     children: [
-      {
-        id: '2-1',
-        name: '数据维护 (Maintenance)',
-        code: 'mdm:data:maintenance',
+      ...MASTER_DATA_ITEMS.map((item, index) => ({
+        id: `2-${index + 1}`,
+        name: `${item.title} (${item.theme})`,
+        code: item.permissionCode,
         type: 'menu',
-        path: '/mdm/data/maintenance',
-      },
+        path: item.path,
+        description: item.description,
+      })),
       {
-        id: '2-2',
-        name: '数据审核 (Audit)',
-        code: 'mdm:data:audit',
-        type: 'menu',
-        path: '/mdm/data/audit',
-      },
-      {
-        id: '2-3',
+        id: `2-${MASTER_DATA_ITEMS.length + 1}`,
         name: '数据分发 (Distribute)',
         code: 'mdm:data:distribute',
         type: 'api',
@@ -81,7 +77,7 @@ const gridOptions: VxeGridProps<any> = {
   },
 };
 
-const [Grid, gridApi] = useVbenVxeGrid({
+const [Grid] = useVbenVxeGrid({
   gridOptions,
 });
 

@@ -1,5 +1,9 @@
 import type { RouteRecordRaw } from 'vue-router';
 import { BasicLayout } from '#/layouts';
+import {
+  DEFAULT_MASTER_DATA_ITEM,
+  MASTER_DATA_ITEMS,
+} from '#/views/mdm/data/shared/master-data';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -118,21 +122,22 @@ const routes: RouteRecordRaw[] = [
     component: BasicLayout,
     name: 'MdmData',
     path: '/mdm/data',
-    redirect: '/mdm/data/maintenance',
+    redirect: DEFAULT_MASTER_DATA_ITEM.path,
     children: [
-      {
-        name: 'MdmDataMaintenance',
-        path: 'maintenance',
+      ...MASTER_DATA_ITEMS.map((item) => ({
+        name: item.routeName,
+        path: item.path.replace('/mdm/data/', ''),
         component: () => import('#/views/mdm/data/maintenance/index.vue'),
         meta: {
-          title: '数据维护',
+          title: item.title,
         },
-      },
+      })),
       {
         name: 'MdmDataAudit',
         path: 'audit',
         component: () => import('#/views/mdm/data/audit/index.vue'),
         meta: {
+          hideInMenu: true,
           title: '数据审核',
         },
       },

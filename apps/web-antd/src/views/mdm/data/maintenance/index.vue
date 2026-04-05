@@ -1,44 +1,20 @@
 <script lang="ts" setup>
-import type { VxeGridProps } from '#/adapter/vxe-table';
-
 import { Page, useVbenModal } from '@vben/common-ui';
 
-import { Button, Card, message, Select, Space, Tag } from 'ant-design-vue';
+import { computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+
+import { Button, message, Select, Space, Tag } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
+import {
+  DEFAULT_MASTER_DATA_ITEM,
+  MASTER_DATA_ITEM_MAP,
+  MASTER_DATA_SELECT_OPTIONS,
+} from '../shared/master-data';
 import { useColumns, useSearchSchema } from './data';
 import DataFormModal from './modules/form.vue';
-
-const MOCK_RECORDS = [
-  {
-    createBy: 'admin',
-    createTime: '2024-03-24 10:00:00',
-    entityCode: 'DEV_LIGHT_001',
-    entityName: '智领系列-吸顶灯 L1',
-    id: '1',
-    status: 'normal',
-    version: 'v1.0.0',
-  },
-  {
-    createBy: 'iot_svc',
-    createTime: '2024-03-25 14:20:00',
-    entityCode: 'DEV_SNSR_002',
-    entityName: '全屋环境传感器 S2',
-    id: '2',
-    status: 'pending',
-    version: 'v1.1.2',
-  },
-  {
-    createBy: 'system',
-    createTime: '2024-03-26 09:15:00',
-    entityCode: 'DEV_LOCK_003',
-    entityName: '方舟智能门锁 X1',
-    id: '3',
-    status: 'normal',
-    version: 'v1.0.1',
-  },
-];
 
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
   invalid: { color: 'default', label: '失效' },
@@ -46,17 +22,22 @@ const STATUS_MAP: Record<string, { color: string; label: string }> = {
   pending: { color: 'warning', label: '审核中' },
 };
 
+const route = useRoute();
+const router = useRouter();
+
+const currentMasterData = computed(() => {
+  const matchedItem = MASTER_DATA_ITEM_MAP[String(route.name ?? '')];
+  return matchedItem ?? DEFAULT_MASTER_DATA_ITEM;
+});
+
 const [Form, formModalApi] = useVbenModal({
   connectedComponent: DataFormModal,
   destroyOnClose: true,
 });
 
-const gridOptions: VxeGridProps<any> = {
+const gridOptions = {
   columns: useColumns(),
-  data: MOCK_RECORDS,
-  formConfig: {
-    schema: useSearchSchema(),
-  },
+  data: currentMasterData.value.records,
   height: 'auto',
   pagerConfig: {
     enabled: true,
@@ -65,61 +46,96 @@ const gridOptions: VxeGridProps<any> = {
   toolbarConfig: {
     custom: true,
     refresh: true,
+    search: true,
     zoom: true,
   },
 };
 
-const [Grid] = useVbenVxeGrid({
+const formOptions = {
+  schema: useSearchSchema(),
+};
+
+const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions,
 });
 
 function handleCreate() {
-  formModalApi.setData(null).open();
+  formModalApi
+    .setData({
+      masterDataTitle: currentMasterData.value.title,
+    })
+    .open();
 }
 
 function handleEdit(row: any) {
-  formModalApi.setData(row).open();
+  formModalApi
+    .setData({
+      ...row,
+      masterDataTitle: currentMasterData.value.title,
+    })
+    .open();
 }
 
 function handleAudit(row: any) {
-  message.info(`审核变更: ${row.entityName}`);
+  message.info(`提交${currentMasterData.value.title}审核: ${row.entityName}`);
 }
 
 function handleHistory(row: any) {
-  message.info(`查看历史版本: ${row.entityName}`);
+  message.info(
+    `查看${currentMasterData.value.title}历史版本: ${row.entityName}`,
+  );
+}
+
+function handleMasterDataChange(path: unknown) {
+  if (typeof path === 'string') {
+    router.push(path);
+  }
 }
 
 function refreshGrid() {
-  message.success('更新成功');
+  message.success(`${currentMasterData.value.title}更新成功`);
 }
+
+watch(
+  currentMasterData,
+  (item) => {
+    gridApi.setGridOptions({
+      data: item.records,
+    });
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <Page
     auto-content-height
     content-class="flex flex-col"
-    description="在各主数据模型下对数据进行增删改查。支持版本历史追踪及数据质量审核。"
-    title="主数据维护"
+    :description="currentMasterData.description"
+    :title="`${currentMasterData.title}主数据`"
   >
     <template #extra>
       <Space>
         <Select
-          :options="[
-            { label: '智能设备 (DEVICES)', value: 'device' },
-            { label: '配件与耗材 (PARTS)', value: 'part' },
-            { label: '生态服务商 (PARTNERS)', value: 'partner' },
-          ]"
-          placeholder="切换主数据模型"
-          style="width: 160px"
+          :options="MASTER_DATA_SELECT_OPTIONS"
+          :value="currentMasterData.path"
+          placeholder="切换主数据"
+          style="width: 260px"
+          @change="handleMasterDataChange"
         />
-        <Button type="primary" @click="handleCreate"> 新增记录 </Button>
+        <Button type="primary" @click="handleCreate">
+          新增{{ currentMasterData.title }}
+        </Button>
       </Space>
     </template>
 
     <Form @success="refreshGrid" />
 
     <div class="flex-1 min-h-0">
-      <Grid table-title="主数据记录">
+      <Grid
+        :form-options="formOptions"
+        :table-title="`${currentMasterData.title}记录`"
+      >
         <template #status="{ row }">
           <Tag :color="STATUS_MAP[row.status]?.color">{{
             STATUS_MAP[row.status]?.label
