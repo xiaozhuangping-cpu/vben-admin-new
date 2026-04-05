@@ -1,0 +1,66 @@
+name: Deploy Web Antd to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Resolve base path
+        shell: bash
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          if [[ "$REPO_NAME" == *.github.io ]]; then
+            echo "PAGE_BASE=/" >> "$GITHUB_ENV"
+          else
+            echo "PAGE_BASE=/$REPO_NAME/" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build web-antd
+        run: pnpm -F @vben/web-antd exec vite build --mode production --base "$PAGE_BASE"
+
+      - name: Prepare Pages artifact
+        shell: bash
+        run: |
+          cp apps/web-antd/dist/index.html apps/web-antd/dist/404.html
+          touch apps/web-antd/dist/.nojekyll
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/web-antd/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

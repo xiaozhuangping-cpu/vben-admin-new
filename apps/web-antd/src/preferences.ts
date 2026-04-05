@@ -8,6 +8,18 @@ import { defineOverridesPreferences } from '@vben/preferences';
 export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
-    name: import.meta.env.VITE_APP_TITLE,
+    accessMode: 'frontend',
+    defaultHomePath: '/dashboard/overview',
+    name: 'JC-MDM | 智能主数据',
+  },
+  logo: {
+    source: '/src/assets/logo-iot.png',
+  },
+  theme: {
+    colorPrimary: '#06b6d4',
+    radius: '10px',
+  },
+  sidebar: {
+    width: 230,
   },
 });
