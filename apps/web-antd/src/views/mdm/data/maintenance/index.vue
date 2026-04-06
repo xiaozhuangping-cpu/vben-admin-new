@@ -139,23 +139,21 @@ watch(
       >
         <template #status="{ row }">
           <Tag :color="STATUS_MAP[row.status]?.color">
-{{
-            STATUS_MAP[row.status]?.label
-          }}
-</Tag>
+            {{ STATUS_MAP[row.status]?.label }}
+          </Tag>
         </template>
 
         <template #action="{ row }">
           <Space>
             <Button size="small" type="link" @click="handleEdit(row)">
-编辑
-</Button>
+              编辑
+            </Button>
             <Button size="small" type="link" @click="handleAudit(row)">
-审核
-</Button>
+              审核
+            </Button>
             <Button size="small" type="link" @click="handleHistory(row)">
-历史
-</Button>
+              历史
+            </Button>
           </Space>
         </template>
       </Grid>

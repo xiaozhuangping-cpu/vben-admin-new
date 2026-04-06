@@ -134,18 +134,14 @@ function handleStatusFilter(node: any) {
 
             <template #roles="{ row }">
               <Tag v-for="role in row.roles" :key="role" color="blue">
-{{
-                role
-              }}
-</Tag>
+                {{ role }}
+              </Tag>
             </template>
 
             <template #status="{ row }">
               <Tag :color="row.status ? 'success' : 'error'">
-{{
-                row.status ? '活动' : '冻结'
-              }}
-</Tag>
+                {{ row.status ? '活动' : '冻结' }}
+              </Tag>
             </template>
 
             <template #action="{ row }">
