@@ -6,6 +6,7 @@ export interface MasterDataRecord {
   id: string;
   status: 'invalid' | 'normal' | 'pending';
   version: string;
+  [key: string]: any;
 }
 
 export interface MasterDataItem {
@@ -26,6 +27,7 @@ function createRecord(
   createTime: string,
   status: MasterDataRecord['status'] = 'normal',
   version = 'v1.0.0',
+  extra: Partial<MasterDataRecord> = {},
 ): MasterDataRecord {
   return {
     createBy,
@@ -35,6 +37,7 @@ function createRecord(
     id,
     status,
     version,
+    ...extra,
   };
 }
 
@@ -83,6 +86,23 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         'Amazon美国旗舰店',
         '店铺运营',
         '2024-04-01 10:15:00',
+        'normal',
+        'v1.0.0',
+        {
+          addressArea: '广东省深圳市宝安区',
+          addressDetail: '西乡街道星河智善大厦 808',
+          authCode: 'AUTH_8X29K',
+          authExpiry: '2025-04-01 10:00:00',
+          authToken: 'TOK_AMZ_U3891X',
+          channelType: 'B2C',
+          contact: '林语堂',
+          externalCode: 'E-AMZ-00129',
+          merchantId: 'M_AMZ_8821',
+          mobile: '13800138000',
+          orgStructure: '营销中心 / 美加运营部',
+          phone: '0755-23118888',
+          platform: 'Amazon',
+        },
       ),
       createRecord(
         'store-2',
@@ -91,6 +111,22 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '渠道经理',
         '2024-04-03 14:30:00',
         'pending',
+        'v1.1.0',
+        {
+          addressArea: '上海市浦东新区',
+          addressDetail: '张江高科技园区 125 号',
+          authCode: 'AUTH_9Y33M',
+          authExpiry: '2024-12-31 23:59:59',
+          authToken: 'TOK_TK_S9910W',
+          channelType: '直播电商',
+          contact: '陈明明',
+          externalCode: 'E-TK-SEA-056',
+          merchantId: 'M_TK_7712',
+          mobile: '13900139000',
+          orgStructure: '营销中心 / 东南亚组',
+          phone: '021-50889999',
+          platform: 'TikTok Shop',
+        },
       ),
     ],
   },

@@ -1,18 +1,21 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
+
 import { Page, useVbenModal } from '@vben/common-ui';
+
 import {
   Button,
+  Card,
+  Col,
   message,
+  Row,
   Space,
   Tag,
-  Modal,
-  Input,
   Tree,
 } from 'ant-design-vue';
+
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { Plus } from '@vben/icons';
-import { h, ref } from 'vue';
+
 import { useColumns } from './data';
 import UserFormModal from './modules/form.vue';
 
@@ -80,7 +83,6 @@ const [Grid, gridApi] = useVbenVxeGrid({
 });
 
 function handleCreate() {
-  console.log('User handleCreate called');
   message.info('正在打开新增用户弹窗...');
   userModalApi.setData({}).open();
 }
@@ -105,40 +107,45 @@ function handleStatusFilter(node: any) {
     description="管理 MDM 系统内部的功能访问用户。可细粒度地为用户分配组织节点、功能角色及数据视图（行/列权限），确保核心数据资产的多租户合规性。"
     title="用户管理"
   >
-    <div class="flex gap-4 flex-1 min-h-0 overflow-hidden">
-      <div
-        class="w-64 min-h-0 bg-white p-4 rounded shadow-sm border border-gray-100 flex flex-col overflow-hidden"
-      >
-        <div class="mb-4 text-sm font-bold border-b pb-2">组织架构</div>
-        <Tree
-          :tree-data="TREE_DATA"
-          block-node
-          default-expand-all
-          @select="(keys, info) => handleStatusFilter(info.node)"
-        />
-      </div>
+    <Row :gutter="16" class="split-layout">
+      <!-- 左侧组织架构 -->
+      <Col :span="6" class="split-side">
+        <Card
+          :body-style="{ padding: '12px' }"
+          class="split-card"
+          title="组织架构"
+        >
+          <Tree
+            :tree-data="TREE_DATA"
+            block-node
+            default-expand-all
+            @select="(keys, info) => handleStatusFilter(info.node)"
+          />
+        </Card>
+      </Col>
 
-      <div
-        class="flex-1 min-w-0 min-h-0 flex flex-col bg-white p-4 rounded shadow-sm border border-gray-100"
-      >
-        <div class="flex justify-end mb-4">
-          <Button type="primary" @click="handleCreate"> 新增用户 </Button>
-        </div>
-
-        <UserModal @success="() => gridApi.reload()" />
-
-        <div class="flex-1 min-h-0">
+      <!-- 右侧用户列表 -->
+      <Col :span="18" class="split-main">
+        <div class="split-main__content">
           <Grid table-title="用户列表">
+            <template #toolbar-tools>
+              <Button type="primary" @click="handleCreate"> 新增用户 </Button>
+            </template>
+
             <template #roles="{ row }">
-              <Tag v-for="role in row.roles" :key="role" color="blue">{{
+              <Tag v-for="role in row.roles" :key="role" color="blue">
+{{
                 role
-              }}</Tag>
+              }}
+</Tag>
             </template>
 
             <template #status="{ row }">
-              <Tag :color="row.status ? 'success' : 'error'">{{
+              <Tag :color="row.status ? 'success' : 'error'">
+{{
                 row.status ? '活动' : '冻结'
-              }}</Tag>
+              }}
+</Tag>
             </template>
 
             <template #action="{ row }">
@@ -165,7 +172,56 @@ function handleStatusFilter(node: any) {
             </template>
           </Grid>
         </div>
-      </div>
-    </div>
+      </Col>
+    </Row>
+
+    <UserModal @success="() => gridApi.reload()" />
   </Page>
 </template>
+
+<style scoped>
+.split-layout {
+  flex-wrap: nowrap;
+  height: 100%;
+  min-height: 0;
+}
+
+.split-side,
+.split-main {
+  display: flex;
+  min-height: 0;
+}
+
+.split-main {
+  flex-direction: column;
+  min-width: 0;
+}
+
+.split-main__content {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.split-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.split-card :deep(.ant-card-head) {
+  flex-shrink: 0;
+}
+
+.split-card :deep(.ant-card-body) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.text-error {
+  color: #ff4d4f;
+}
+</style>

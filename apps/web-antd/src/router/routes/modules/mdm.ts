@@ -1,4 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router';
+
 import { BasicLayout } from '#/layouts';
 import {
   DEFAULT_MASTER_DATA_ITEM,
@@ -32,7 +33,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       icon: 'lucide:database',
       order: 100,
-      title: '数据资产建模',
+      title: '数据建模',
     },
     component: BasicLayout,
     name: 'MdmModel',

@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-import { Page, useVbenModal } from '@vben/common-ui';
-
 import { computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+
+import { Page, useVbenModal } from '@vben/common-ui';
 
 import { Button, message, Select, Space, Tag } from 'ant-design-vue';
 
@@ -36,7 +36,7 @@ const [Form, formModalApi] = useVbenModal({
 });
 
 const gridOptions = {
-  columns: useColumns(),
+  columns: useColumns(String(route.name ?? '')),
   data: currentMasterData.value.records,
   height: 'auto',
   pagerConfig: {
@@ -100,6 +100,7 @@ watch(
   currentMasterData,
   (item) => {
     gridApi.setGridOptions({
+      columns: useColumns(String(route.name ?? '')),
       data: item.records,
     });
   },
@@ -137,22 +138,24 @@ watch(
         :table-title="`${currentMasterData.title}记录`"
       >
         <template #status="{ row }">
-          <Tag :color="STATUS_MAP[row.status]?.color">{{
+          <Tag :color="STATUS_MAP[row.status]?.color">
+{{
             STATUS_MAP[row.status]?.label
-          }}</Tag>
+          }}
+</Tag>
         </template>
 
         <template #action="{ row }">
           <Space>
-            <Button size="small" type="link" @click="handleEdit(row)"
-              >编辑</Button
-            >
-            <Button size="small" type="link" @click="handleAudit(row)"
-              >审核</Button
-            >
-            <Button size="small" type="link" @click="handleHistory(row)"
-              >历史</Button
-            >
+            <Button size="small" type="link" @click="handleEdit(row)">
+编辑
+</Button>
+            <Button size="small" type="link" @click="handleAudit(row)">
+审核
+</Button>
+            <Button size="small" type="link" @click="handleHistory(row)">
+历史
+</Button>
           </Space>
         </template>
       </Grid>
