@@ -2,6 +2,7 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
 import { Page, useVbenModal } from '@vben/common-ui';
+import { Ellipsis, Plus } from '@vben/icons';
 
 import {
   Button,
@@ -17,83 +18,154 @@ import {
 } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { Ellipsis, Plus } from '@vben/icons';
 
 import { useColumns } from './data';
-import ModelFormModal from './modules/form.vue';
 import AuthModal from './modules/auth.vue';
+import ModelFormModal from './modules/form.vue';
 import VersionModal from './modules/version.vue';
 
 const THEME_TREE_DATA = [
   {
-    key: '0-0',
-    title: '智能家具 (FURNITURE)',
+    key: 'marketing',
+    title: '一、营销类主数据',
     children: [
-      { key: '0-0-0', title: '智能睡床' },
-      { key: '0-0-1', title: '电动沙发' },
-      { key: '0-0-2', title: '人体工学椅' },
+      { key: 'marketing-01', title: '1、电商平台' },
+      { key: 'marketing-02', title: '2、电商店铺' },
     ],
   },
   {
-    key: '0-1',
-    title: '智能家电 (APPLIANCE)',
+    key: 'supply-chain',
+    title: '二、供应链主数据',
     children: [
-      { key: '0-1-0', title: '扫地机器人' },
-      { key: '0-1-1', title: '环境调节器' },
+      { key: 'supply-01', title: '1、供应商' },
+      { key: 'supply-02', title: '2、公司主体' },
     ],
   },
   {
-    key: '0-2',
-    title: '传感感知 (iot)',
+    key: 'finance',
+    title: '三、财务类主数据',
     children: [
-      { key: '0-2-0', title: '视觉传感器' },
-      { key: '0-2-1', title: '环境监测仪' },
+      { key: 'finance-01', title: '1、币种' },
+      { key: 'finance-02', title: '2、汇率' },
+      { key: 'finance-03', title: '3、费用项目' },
+      { key: 'finance-04', title: '4、支付渠道' },
+    ],
+  },
+  {
+    key: 'admin',
+    title: '四、行政类主数据',
+    children: [
+      { key: 'admin-01', title: '1、组织机构' },
+      { key: 'admin-02', title: '2、员工' },
+      { key: 'admin-03', title: '3、账号' },
+    ],
+  },
+  {
+    key: 'general',
+    title: '五、通用类主数据',
+    children: [
+      { key: 'general-01', title: '1、国家' },
+      { key: 'general-02', title: '2、地区' },
+      { key: 'general-03', title: '3、仓库' },
+      { key: 'general-04', title: '4、物流渠道' },
     ],
   },
 ];
 
-const PRODUCT_MODELS = [
-  { name: '智能洗地机 X9 Pro', code: 'WASH_X9_P', table: 'MDM_SCRUBBER_X9' },
+const MASTER_DATA_ITEMS = [
   {
-    name: '毫米波雷达人体感应器',
-    code: 'RADAR_MMW_01',
-    table: 'MDM_SENSOR_RADAR',
+    code: 'MDM_EPLATFORM',
+    name: '电商平台',
+    org: '营销中心',
+    table: 'mdm_e_platform',
   },
   {
-    name: '全向智能窗帘电机',
-    code: 'CURTAIN_M_02',
-    table: 'MDM_MOTOR_CURTAIN',
+    code: 'MDM_ESTORE',
+    name: '电商店铺',
+    org: '营销中心',
+    table: 'mdm_e_store',
   },
-  { name: '嵌入式 8 键触控屏', code: 'PANEL_LCD_8', table: 'MDM_PANEL_TOUCH' },
-  { name: '智能变频冷风扇', code: 'FAN_FREQ_AC', table: 'MDM_DEVICE_FAN' },
-  { name: '指纹猫眼智能门锁', code: 'LOCK_EYE_05', table: 'MDM_LOCK_SECURITY' },
   {
-    name: '直饮水滤芯监测仪',
-    code: 'WATER_FILTER_A',
-    table: 'MDM_FILTER_WATCH',
+    code: 'MDM_SUPPLIER',
+    name: '供应商',
+    org: '供应链部',
+    table: 'mdm_supplier',
+  },
+  {
+    code: 'MDM_LEGAL_ENTITY',
+    name: '公司主体',
+    org: '集团财务',
+    table: 'mdm_legal_entity',
+  },
+  {
+    code: 'MDM_CURRENCY',
+    name: '币种',
+    org: '财务中心',
+    table: 'mdm_currency',
+  },
+  {
+    code: 'MDM_EXRATE',
+    name: '汇率',
+    org: '财务中心',
+    table: 'mdm_exchange_rate',
+  },
+  {
+    code: 'MDM_EXPENSE_ITEM',
+    name: '费用项目',
+    org: '财务中心',
+    table: 'mdm_expense_item',
+  },
+  {
+    code: 'MDM_PAYMENT_CH',
+    name: '支付渠道',
+    org: '财务中心',
+    table: 'mdm_payment_channel',
+  },
+  {
+    code: 'MDM_ORG',
+    name: '组织机构',
+    org: '行政人力',
+    table: 'mdm_organization',
+  },
+  {
+    code: 'MDM_EMPLOYEE',
+    name: '员工',
+    org: '行政人力',
+    table: 'mdm_employee',
+  },
+  {
+    code: 'MDM_ACCOUNT',
+    name: '账号',
+    org: '信息技术',
+    table: 'mdm_account',
+  },
+  { code: 'MDM_COUNTRY', name: '国家', org: '通用支撑', table: 'mdm_country' },
+  { code: 'MDM_REGION', name: '地区', org: '通用支撑', table: 'mdm_region' },
+  {
+    code: 'MDM_WAREHOUSE',
+    name: '仓库',
+    org: '供应链部',
+    table: 'mdm_warehouse',
+  },
+  {
+    code: 'MDM_LOGISTICS_CH',
+    name: '物流渠道',
+    org: '供应链部',
+    table: 'mdm_logistics_channel',
   },
 ];
 
-const MOCK_MODELS = Array.from({ length: 40 }).map((_, index) => {
-  const base = PRODUCT_MODELS[index % PRODUCT_MODELS.length];
+const MOCK_MODELS = MASTER_DATA_ITEMS.map((item, index) => {
   return {
+    code: item.code,
     id: `${index + 1}`,
-    code: index < PRODUCT_MODELS.length ? base.code : `${base.code}_${index}`,
-    name:
-      index < PRODUCT_MODELS.length
-        ? base.name
-        : `${base.name} Gen.${Math.floor(index / 7)}`,
-    tableName: index < PRODUCT_MODELS.length ? base.table : `${base.table}_EXT`,
-    version: `v${Math.floor(index / 5) + 1}.${index % 5}.0`,
-    type: ['normal', 'composite', 'inherited', 'related'][index % 4],
+    isAudit: true,
+    name: item.name,
+    org: item.org,
     status: ['draft', 'published', 'revision', 'archived'][index % 4],
-    isAudit: index % 2 === 0,
-    org:
-      index % 3 === 0
-        ? '智能清洁部'
-        : index % 3 === 1
-          ? '智能控制部'
-          : 'iot感知中心',
+    tableName: item.table,
+    type: ['normal', 'composite', 'inherited', 'related'][index % 4],
+    version: 'v1.0.0',
   };
 });
 
