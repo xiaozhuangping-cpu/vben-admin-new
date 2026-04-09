@@ -23,6 +23,7 @@ export interface ModelField {
   defaultValue?: string;
   definitionId: string;
   id?: string;
+  isMultiple?: boolean;
   isPrimary?: boolean;
   isRequired?: boolean;
   isUnique?: boolean;
@@ -212,6 +213,7 @@ export async function getModelFieldListApi(definitionId: string) {
     dataType: item.data_type,
     defaultValue: item.default_value,
     definitionId: item.definition_id,
+    isMultiple: item.is_multiple,
     isPrimary: item.is_primary,
     isRequired: item.is_required,
     isUnique: item.is_unique,
@@ -226,6 +228,7 @@ export async function createModelFieldApi(data: ModelField) {
     data_type: data.dataType,
     default_value: data.defaultValue ?? null,
     definition_id: data.definitionId,
+    is_multiple: !!data.isMultiple,
     is_primary: !!data.isPrimary,
     is_required: !!data.isRequired,
     is_unique: !!data.isUnique,
@@ -244,6 +247,7 @@ export async function updateModelFieldApi(id: string, data: ModelField) {
       code: data.code,
       data_type: data.dataType,
       default_value: data.defaultValue ?? null,
+      is_multiple: !!data.isMultiple,
       is_primary: !!data.isPrimary,
       is_required: !!data.isRequired,
       is_unique: !!data.isUnique,

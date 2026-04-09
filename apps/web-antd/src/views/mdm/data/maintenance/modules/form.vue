@@ -8,6 +8,10 @@ import {
   createDynamicMasterDataRecordApi,
   updateDynamicMasterDataRecordApi,
 } from '#/api/mdm/master-data';
+import {
+  normalizeAttachmentValue,
+  serializeAttachmentValue,
+} from '#/api/mdm/storage';
 
 import { buildDynamicFormSchema } from '../data';
 
@@ -39,7 +43,19 @@ const [Modal, modalApi] = useVbenModal({
     try {
       const values = await formApi.getValues();
       const payload = Object.fromEntries(
-        Object.entries(values).filter(([, value]) => value !== undefined),
+        Object.entries(values)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => {
+            const field = (currentData.value?.fields || []).find(
+              (item: any) => item.code?.toLowerCase() === key,
+            );
+
+            if (field?.dataType === 'attachment') {
+              return [key, serializeAttachmentValue(value, !!field.isMultiple)];
+            }
+
+            return [key, value];
+          }),
       );
 
       await (currentData.value?.id
@@ -65,10 +81,26 @@ const [Modal, modalApi] = useVbenModal({
       const data = modalApi.getData<any>();
       currentData.value = data;
       formApi.setState({
-        schema: buildDynamicFormSchema(data?.fields || []),
+        schema: buildDynamicFormSchema(data?.fields || [], {
+          tableName: data?.tableName,
+        }),
       });
       formApi.resetForm();
-      formApi.setValues(data || {});
+      const attachmentValues = Object.fromEntries(
+        (data?.fields || [])
+          .filter((field: any) => field.dataType === 'attachment')
+          .map((field: any) => [
+            field.code.toLowerCase(),
+            normalizeAttachmentValue(
+              data?.[field.code.toLowerCase()],
+              !!field.isMultiple,
+            ),
+          ]),
+      );
+      formApi.setValues({
+        ...(data || {}),
+        ...attachmentValues,
+      });
     }
   },
 });

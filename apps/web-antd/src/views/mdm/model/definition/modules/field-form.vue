@@ -44,6 +44,7 @@ const [Form, formApi] = useVbenForm({
           { label: '布尔', value: 'boolean' },
           { label: '日期', value: 'date' },
           { label: '时间', value: 'timestamptz' },
+          { label: '附件(URL)', value: 'attachment' },
         ],
         placeholder: '请选择数据类型',
       },
@@ -78,6 +79,12 @@ const [Form, formApi] = useVbenForm({
     },
     {
       component: 'Switch',
+      fieldName: 'isMultiple',
+      label: '多附件',
+      defaultValue: false,
+    },
+    {
+      component: 'Switch',
       fieldName: 'isRequired',
       label: '必填',
       defaultValue: false,
@@ -102,7 +109,10 @@ const [Form, formApi] = useVbenForm({
     },
     {
       component: 'Textarea',
-      componentProps: { placeholder: '备注' },
+      componentProps: {
+        placeholder:
+          '附件类型建议直接填写 Supabase Storage 文件 URL，不需要额外附件表。',
+      },
       fieldName: 'remarks',
       label: '备注',
     },

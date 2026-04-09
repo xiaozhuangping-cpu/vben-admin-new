@@ -1,37 +1,20 @@
--- MDM 模型升级/发布增量修复 SQL
--- 用途：
--- 1. 修复 upgrade_model_definition 复制字段逻辑
--- 2. 修复 publish_model_definition 为固定业务表按字段差异调整结构
--- 3. 为动态业务表自动开启 RLS + authenticated CRUD policy
--- 4. 增加迁移日志表 mdm_model_migrations
+-- MDM 附件字段支持（Supabase 纯 URL 方案）
+-- 用法：直接执行本文件
+-- 说明：
+-- 1. 模型字段 data_type 新增 attachment
+-- 2. 模型字段新增 is_multiple，支持单附件/多附件
+-- 3. 动态业务表发布时 attachment 映射为 jsonb
+-- 4. 业务表中直接存 Supabase Storage 文件 URL 数组
 
-create table if not exists public.mdm_model_migrations (
-  id uuid not null default gen_random_uuid(),
-  definition_id uuid not null,
-  version_no integer not null,
-  table_name text not null,
-  executed_sql text[] not null default '{}',
-  status text not null default 'success',
-  error_message text null,
-  created_by uuid null default auth.uid(),
-  created_at timestamp with time zone not null default now(),
-  constraint mdm_model_migrations_pkey primary key (id),
-  constraint mdm_model_migrations_definition_id_fkey
-    foreign key (definition_id)
-    references public.mdm_model_definitions (id)
-    on delete cascade
-) tablespace pg_default;
+alter table public.mdm_model_fields
+  add column if not exists is_multiple boolean not null default false;
 
-create index if not exists idx_mdm_model_migrations_definition_id
-  on public.mdm_model_migrations (definition_id);
+alter table public.mdm_model_fields
+  drop constraint if exists mdm_model_fields_data_type_check;
 
-create or replace function public.set_current_timestamp_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+alter table public.mdm_model_fields
+  add constraint mdm_model_fields_data_type_check
+  check (data_type in ('text', 'varchar', 'int4', 'numeric', 'boolean', 'date', 'timestamptz', 'attachment'));
 
 create or replace function public.publish_model_definition(p_definition_id uuid)
 returns jsonb
@@ -240,32 +223,25 @@ begin
     )
   );
 
-  v_sql := format('alter table public.%I enable row level security', v_table_name);
-  execute v_sql;
-  v_executed_sql := array_append(v_executed_sql, v_sql);
-
-  v_sql := format(
-    'grant select, insert, update, delete on table public.%I to authenticated',
+  execute format('alter table public.%I enable row level security', v_table_name);
+  execute format('drop policy if exists "authenticated crud" on public.%I', v_table_name);
+  execute format(
+    'create policy "authenticated crud" on public.%I for all to authenticated using (true) with check (true)',
     v_table_name
   );
-  execute v_sql;
-  v_executed_sql := array_append(v_executed_sql, v_sql);
 
-  v_sql := format(
-    'drop policy if exists %I on public.%I',
-    format('authenticated_crud_%s', v_table_name),
-    v_table_name
-  );
-  execute v_sql;
-  v_executed_sql := array_append(v_executed_sql, v_sql);
+  update public.mdm_model_definitions
+  set status = 'published',
+      table_name = v_table_name,
+      updated_at = now()
+  where id = p_definition_id;
 
-  v_sql := format(
-    'create policy %I on public.%I for all to authenticated using (auth.uid() is not null) with check (auth.uid() is not null)',
-    format('authenticated_crud_%s', v_table_name),
-    v_table_name
-  );
-  execute v_sql;
-  v_executed_sql := array_append(v_executed_sql, v_sql);
+  update public.mdm_model_definitions
+  set status = 'unpublished',
+      updated_at = now()
+  where root_definition_id = coalesce(v_definition.root_definition_id, v_definition.id)
+    and id <> p_definition_id
+    and status = 'published';
 
   insert into public.mdm_model_versions (
     definition_id,
@@ -278,9 +254,9 @@ begin
     field_snapshot
   )
   values (
-    v_definition.id,
+    p_definition_id,
     v_definition.version_no,
-    format('v%s.0', v_definition.version_no),
+    format('v%s', v_definition.version_no),
     'published',
     'publish',
     v_table_name,
@@ -296,18 +272,12 @@ begin
     status
   )
   values (
-    v_definition.id,
+    p_definition_id,
     v_definition.version_no,
     v_table_name,
     v_executed_sql,
     'success'
   );
-
-  update public.mdm_model_definitions
-  set status = 'published',
-      table_name = v_table_name,
-      updated_at = now()
-  where id = p_definition_id;
 
   return jsonb_build_object(
     'definition_id', p_definition_id,
@@ -317,135 +287,4 @@ begin
 end;
 $$;
 
-create or replace function public.unpublish_model_definition(p_definition_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  update public.mdm_model_definitions
-  set status = 'unpublished',
-      updated_at = now()
-  where id = p_definition_id
-    and status = 'published';
-
-  if not found then
-    raise exception '只有已发布状态模型才能取消发布';
-  end if;
-
-  return jsonb_build_object(
-    'definition_id', p_definition_id,
-    'status', 'unpublished'
-  );
-end;
-$$;
-
-create or replace function public.upgrade_model_definition(p_definition_id uuid)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_source public.mdm_model_definitions%rowtype;
-  v_new_id uuid;
-  v_root_id uuid;
-begin
-  select *
-  into v_source
-  from public.mdm_model_definitions
-  where id = p_definition_id;
-
-  if not found then
-    raise exception '数据模型不存在';
-  end if;
-
-  if v_source.status <> 'published' then
-    raise exception '只有已发布模型才能升级';
-  end if;
-
-  update public.mdm_model_definitions
-  set status = 'unpublished',
-      updated_at = now()
-  where id = p_definition_id
-    and status = 'published';
-
-  v_root_id := coalesce(v_source.root_definition_id, v_source.id);
-
-  insert into public.mdm_model_definitions (
-    root_definition_id,
-    source_definition_id,
-    theme_id,
-    name,
-    code,
-    status,
-    version_no,
-    table_name,
-    description
-  )
-  values (
-    v_root_id,
-    v_source.id,
-    v_source.theme_id,
-    v_source.name,
-    v_source.code,
-    'draft',
-    v_source.version_no + 1,
-    null,
-    v_source.description
-  )
-  returning id into v_new_id;
-
-  insert into public.mdm_model_fields (
-    definition_id,
-    name,
-    code,
-    data_type,
-    length,
-    precision,
-    is_multiple,
-    is_required,
-    is_primary,
-    is_unique,
-    default_value,
-    sort,
-    status,
-    remarks
-  )
-  select
-    v_new_id,
-    name,
-    code,
-    data_type,
-    length,
-    precision,
-    is_multiple,
-    is_required,
-    is_primary,
-    is_unique,
-    default_value,
-    sort,
-    status,
-    remarks
-  from public.mdm_model_fields
-  where definition_id = p_definition_id
-  order by sort asc, created_at asc;
-
-  return v_new_id;
-end;
-$$;
-
-alter table public.mdm_model_migrations enable row level security;
-
-drop policy if exists "authenticated crud mdm_model_migrations" on public.mdm_model_migrations;
-create policy "authenticated crud mdm_model_migrations"
-on public.mdm_model_migrations
-for all
-to authenticated
-using (auth.uid() is not null)
-with check (auth.uid() is not null);
-
 grant execute on function public.publish_model_definition(uuid) to authenticated;
-grant execute on function public.unpublish_model_definition(uuid) to authenticated;
-grant execute on function public.upgrade_model_definition(uuid) to authenticated;

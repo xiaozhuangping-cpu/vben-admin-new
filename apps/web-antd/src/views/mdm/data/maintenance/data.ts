@@ -1,6 +1,11 @@
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { ModelField } from '#/api/mdm/model-definition';
+import type { UploadFile, UploadProps } from 'ant-design-vue';
+
+import { message } from 'ant-design-vue';
+
+import { uploadFileToSupabaseStorage } from '#/api/mdm/storage';
 
 export const useColumns = (
   routeName?: string,
@@ -88,6 +93,9 @@ export const buildDynamicColumns = (
 
 export const buildDynamicFormSchema = (
   fields: ModelField[],
+  options: {
+    tableName: string;
+  },
 ): VbenFormSchema[] => {
   return fields
     .filter((field) => field.status !== false)
@@ -142,6 +150,49 @@ export const buildDynamicFormSchema = (
               field.dataType === 'numeric' ? (field.precision ?? 2) : 0,
             style: { width: '100%' },
           },
+        } satisfies VbenFormSchema;
+      }
+
+      if (field.dataType === 'attachment') {
+        const maxCount = field.isMultiple ? 9 : 1;
+
+        return {
+          ...common,
+          component: 'Upload',
+          componentProps: {
+            accept:
+              '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.zip,.rar',
+            customRequest: async (uploadOptions: any) => {
+              try {
+                const file = uploadOptions.file as File;
+                const result = await uploadFileToSupabaseStorage(file, {
+                  fieldCode: field.code.toLowerCase(),
+                  tableName: options.tableName,
+                });
+
+                uploadOptions.onSuccess?.(result);
+              } catch (error: any) {
+                message.error(error?.message || '上传附件失败');
+                uploadOptions.onError?.(error);
+              }
+            },
+            listType: 'text',
+            maxCount,
+            multiple: !!field.isMultiple,
+            onHandleChange: (event: { file: UploadFile; fileList: UploadFile[] }) => {
+              const uploadedUrl =
+                event.file?.response?.url || event.file?.url || '';
+              if (uploadedUrl) {
+                event.file.url = uploadedUrl;
+              }
+              event.fileList = event.fileList.map((item) => ({
+                ...item,
+                url: item.url || item.response?.url,
+              })) as UploadProps['fileList'];
+            },
+            placeholder: `请上传${field.name}`,
+          },
+          rules: field.isRequired ? 'required' : undefined,
         } satisfies VbenFormSchema;
       }
 
