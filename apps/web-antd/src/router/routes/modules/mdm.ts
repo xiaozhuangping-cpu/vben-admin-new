@@ -1,10 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 import { BasicLayout } from '#/layouts';
-import {
-  DEFAULT_MASTER_DATA_ITEM,
-  MASTER_DATA_ITEMS,
-} from '#/views/mdm/data/shared/master-data';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -123,16 +119,8 @@ const routes: RouteRecordRaw[] = [
     component: BasicLayout,
     name: 'MdmData',
     path: '/mdm/data',
-    redirect: DEFAULT_MASTER_DATA_ITEM.path,
+    redirect: '/mdm/model/definition',
     children: [
-      ...MASTER_DATA_ITEMS.map((item) => ({
-        name: item.routeName,
-        path: item.path.replace('/mdm/data/', ''),
-        component: () => import('#/views/mdm/data/maintenance/index.vue'),
-        meta: {
-          title: item.title,
-        },
-      })),
       {
         name: 'MdmDataAudit',
         path: 'audit',
@@ -207,6 +195,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/mdm/system/permission/index.vue'),
         meta: {
           title: '权限配置',
+        },
+      },
+      {
+        name: 'MdmSystemUserGroup',
+        path: 'user-group',
+        component: () => import('#/views/mdm/system/user-group/index.vue'),
+        meta: {
+          title: '用户组管理',
         },
       },
       {

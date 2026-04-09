@@ -44,7 +44,7 @@ export function useSchema() {
     {
       field: 'remark',
       label: '版本备注',
-      component: 'InputTextArea',
+      component: 'Textarea',
       required: true,
     },
   ];

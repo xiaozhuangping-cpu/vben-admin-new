@@ -1,25 +1,29 @@
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
+import { getThemeListApi } from '#/api/mdm/theme';
+
 export const useColumns = (): VxeGridProps<any>['columns'] => [
   { title: '序号', type: 'seq', width: 60 },
-  { field: 'name', title: '模型名称', minWidth: 160 },
-  { field: 'code', title: '模型编码', width: 140 },
-  { field: 'tableName', title: '表名称', width: 140 },
-  { field: 'type', title: '模型类型', width: 100, slots: { default: 'type' } },
-  { field: 'org', title: '组织机构', width: 120 },
-  { field: 'version', title: '当前版本', width: 100 },
+  { field: 'name', title: '模型名称', minWidth: 180 },
+  { field: 'code', title: '模型编码', width: 160 },
+  { field: 'themeName', title: '数据主题', width: 160 },
+  { field: 'versionNo', title: '版本号', width: 100 },
+  { field: 'tableName', title: '数据表', minWidth: 220 },
   {
     field: 'status',
     slots: { default: 'status' },
     title: '状态',
     width: 100,
   },
+  { field: 'description', title: '描述', minWidth: 220 },
+  { field: 'updatedAt', title: '更新时间', width: 180 },
   {
     fixed: 'right',
+    showOverflow: false,
     slots: { default: 'action' },
     title: '操作',
-    width: 240,
+    width: 360,
   },
 ];
 
@@ -43,65 +47,27 @@ export const useSchema = (): VbenFormSchema[] => [
     rules: 'required',
   },
   {
-    component: 'Input',
+    component: 'ApiSelect',
     componentProps: {
-      placeholder: '请输入表名称 (留空则与编码一致)',
+      api: async () => {
+        const { items } = await getThemeListApi({ pageSize: 1000 });
+        return items.map((item: any) => ({
+          label: item.name,
+          value: item.id,
+        }));
+      },
+      placeholder: '请选择数据主题',
     },
-    fieldName: 'tableName',
-    label: '表名称',
-  },
-  {
-    component: 'Select',
-    componentProps: {
-      options: [
-        { label: '普通模型', value: 'normal' },
-        { label: '组合模型', value: 'composite' },
-        { label: '继承模型', value: 'inherited' },
-        { label: '关联模型', value: 'related' },
-      ],
-      placeholder: '请选择模型类型',
-    },
-    fieldName: 'type',
-    label: '模型类型',
-    rules: 'required',
-    defaultValue: 'normal',
-  },
-  {
-    component: 'Input',
-    componentProps: {
-      placeholder: '请选择组织机构',
-    },
-    fieldName: 'org',
-    label: '组织机构',
+    fieldName: 'themeId',
+    label: '数据主题',
     rules: 'required',
   },
   {
-    component: 'RadioGroup',
+    component: 'Textarea',
     componentProps: {
-      options: [
-        { label: '是', value: true },
-        { label: '否', value: false },
-      ],
+      placeholder: '请输入描述',
     },
-    fieldName: 'isAudit',
-    label: '是否审核',
-    defaultValue: false,
-  },
-  {
-    component: 'Input',
-    componentProps: {
-      placeholder: '请输入排序号',
-    },
-    fieldName: 'sort',
-    label: '排序号',
-    defaultValue: 10,
-  },
-  {
-    component: 'InputTextArea',
-    componentProps: {
-      placeholder: '请输入备注',
-    },
-    fieldName: 'remarks',
-    label: '备注',
+    fieldName: 'description',
+    label: '描述',
   },
 ];

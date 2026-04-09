@@ -1,3 +1,7 @@
+import type { RouteRecordRaw } from 'vue-router';
+
+import { getModelDefinitionListApi } from '#/api/mdm/model-definition';
+
 export interface MasterDataRecord {
   createBy: string;
   createTime: string;
@@ -11,10 +15,13 @@ export interface MasterDataRecord {
 
 export interface MasterDataItem {
   description: string;
+  definitionId?: string;
+  dynamic?: boolean;
   path: string;
   permissionCode: string;
   records: MasterDataRecord[];
   routeName: string;
+  tableName?: string;
   theme: string;
   title: string;
 }
@@ -467,6 +474,85 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
     ],
   },
 ];
+
+let dynamicMasterDataItems: MasterDataItem[] = [];
+let dynamicMasterDataLoaded = false;
+
+function toPascalCase(value: string) {
+  return value
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
+    .join('');
+}
+
+function toKebabCase(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
+export async function loadDynamicMasterDataItems(force = false) {
+  if (dynamicMasterDataLoaded && !force) {
+    return dynamicMasterDataItems;
+  }
+
+  const { items } = await getModelDefinitionListApi({
+    pageSize: 1000,
+    status: 'eq.published',
+  });
+
+  dynamicMasterDataItems = items
+    .filter((item: any) => item.tableName)
+    .map((item: any) => {
+      const slug = toKebabCase(item.code || item.name || item.id);
+      return {
+        definitionId: item.id,
+        description:
+          item.description ||
+          `基于数据模型 ${item.name} 动态生成的主数据维护列表。`,
+        dynamic: true,
+        path: `${MASTER_DATA_BASE_PATH}/${slug}`,
+        permissionCode: `mdm:data:model:${slug}`,
+        records: [],
+        routeName: `MdmDataDynamic${toPascalCase(item.code || item.id)}`,
+        tableName: item.tableName,
+        theme: item.themeName || '动态模型',
+        title: item.name,
+      } satisfies MasterDataItem;
+    });
+
+  dynamicMasterDataLoaded = true;
+  return dynamicMasterDataItems;
+}
+
+export function getAllMasterDataItems() {
+  return [...dynamicMasterDataItems];
+}
+
+export function getMasterDataItemByRouteName(routeName?: string) {
+  return getAllMasterDataItems().find((item) => item.routeName === routeName);
+}
+
+export function getMasterDataSelectOptions() {
+  return getAllMasterDataItems().map((item) => ({
+    label: `${item.title} · ${item.theme}`,
+    value: item.path,
+  }));
+}
+
+export function getDynamicMasterDataChildrenRoutes(): RouteRecordRaw[] {
+  return dynamicMasterDataItems.map((item) => ({
+    component: () => import('#/views/mdm/data/maintenance/index.vue'),
+    meta: {
+      title: item.title,
+    },
+    name: item.routeName,
+    path: item.path.replace('/mdm/data/', ''),
+  }));
+}
 
 const defaultMasterDataItem = MASTER_DATA_ITEMS[0];
 

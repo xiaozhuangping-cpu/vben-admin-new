@@ -4,8 +4,12 @@ import { computed, ref } from 'vue';
 import { useVbenModal } from '@vben/common-ui';
 
 import { useVbenForm } from '#/adapter/form';
+import {
+  createDynamicMasterDataRecordApi,
+  updateDynamicMasterDataRecordApi,
+} from '#/api/mdm/master-data';
 
-import { useSchema } from '../data';
+import { buildDynamicFormSchema } from '../data';
 
 const emit = defineEmits(['success']);
 const currentData = ref<any>(null);
@@ -19,27 +23,51 @@ const getTitle = computed(() => {
 
 const [Form, formApi] = useVbenForm({
   layout: 'vertical',
-  schema: useSchema(),
+  schema: [],
   showDefaultActions: false,
 });
 
 const [Modal, modalApi] = useVbenModal({
+  class: 'w-[760px] max-w-[92vw]',
   async onConfirm() {
     const { valid } = await formApi.validate();
-    if (valid) {
-      modalApi.lock();
-      await formApi.getValues();
-      setTimeout(() => {
-        modalApi.lock(false);
-        modalApi.close();
-        emit('success');
-      }, 500);
+    if (!valid) {
+      return;
+    }
+
+    modalApi.lock();
+    try {
+      const values = await formApi.getValues();
+      const payload = Object.fromEntries(
+        Object.entries(values).filter(([, value]) => value !== undefined),
+      );
+
+      await (currentData.value?.id
+        ? updateDynamicMasterDataRecordApi(
+            currentData.value.tableName,
+            currentData.value.id,
+            payload,
+          )
+        : createDynamicMasterDataRecordApi(
+            currentData.value.tableName,
+            payload,
+          ));
+
+      currentData.value?.onSuccess?.();
+      emit('success');
+      modalApi.close();
+    } finally {
+      modalApi.lock(false);
     }
   },
   onOpenChange(isOpen) {
     if (isOpen) {
       const data = modalApi.getData<any>();
       currentData.value = data;
+      formApi.setState({
+        schema: buildDynamicFormSchema(data?.fields || []),
+      });
+      formApi.resetForm();
       formApi.setValues(data || {});
     }
   },

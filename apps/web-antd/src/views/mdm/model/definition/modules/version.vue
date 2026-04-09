@@ -1,55 +1,73 @@
 <script lang="ts" setup>
+import { ref } from 'vue';
+
 import { useVbenModal } from '@vben/common-ui';
-import { Table, Tag, Button, Space } from 'ant-design-vue';
+
+import { Button, Space, Table, Tag } from 'ant-design-vue';
+
+import { getModelVersionListApi } from '#/api/mdm/model-definition';
 
 const columns = [
-  { title: '版本号', dataIndex: 'version', key: 'version' },
-  { title: '状态', dataIndex: 'status', key: 'status' },
-  { title: '发布人', dataIndex: 'creator', key: 'creator' },
-  { title: '发布时间', dataIndex: 'createdAt', key: 'createdAt' },
-  { title: '备注', dataIndex: 'remark', key: 'remark' },
-  { title: '操作', key: 'action' },
+  {
+    title: '版本号',
+    dataIndex: 'versionLabel',
+    key: 'versionLabel',
+    width: 120,
+  },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
+  { title: '操作类型', dataIndex: 'actionType', key: 'actionType', width: 140 },
+  { title: '发布时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+  { title: '数据表', dataIndex: 'tableName', key: 'tableName', width: 220 },
+  { title: '操作', key: 'action', width: 120 },
 ];
 
-const mockVersions = [
-  {
-    version: 'V1.0.2',
-    status: '生效中',
-    creator: 'Admin',
-    createdAt: '2024-03-15 10:00:00',
-    remark: '新增重量及图片属性',
-  },
-  {
-    version: 'V1.0.1',
-    status: '已废弃',
-    creator: '张先生',
-    createdAt: '2024-03-01 09:00:00',
-    remark: '初始定义版本',
-  },
-];
+const loading = ref(false);
+const versions = ref<any[]>([]);
 
 const [Modal, modalApi] = useVbenModal({
   title: '版本历史追溯',
   footer: false,
+  modalProps: {
+    width: 980,
+  },
+  onOpenChange: async (isOpen) => {
+    if (!isOpen) {
+      return;
+    }
+    const data = modalApi.getData<any>() || {};
+    if (!data.id) {
+      versions.value = [];
+      return;
+    }
+    loading.value = true;
+    try {
+      versions.value = await getModelVersionListApi(data.id);
+    } finally {
+      loading.value = false;
+    }
+  },
 });
 </script>
 
 <template>
   <Modal>
     <div class="p-4">
-      <Table :columns="columns" :data-source="mockVersions" :pagination="false">
+      <Table
+        :columns="columns"
+        :data-source="versions"
+        :loading="loading"
+        :pagination="false"
+        row-key="id"
+      >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
-            <Tag :color="record.status === '生效中' ? 'green' : 'default'">
+            <Tag :color="record.status === 'published' ? 'green' : 'default'">
               {{ record.status }}
             </Tag>
           </template>
           <template v-else-if="column.key === 'action'">
             <Space>
               <Button type="link" size="small">查看定义</Button>
-              <Button type="link" size="small" v-if="record.status !== '生效中'"
-                >回滚</Button
-              >
             </Space>
           </template>
         </template>

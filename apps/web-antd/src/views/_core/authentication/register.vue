@@ -7,6 +7,10 @@ import { computed, h, ref } from 'vue';
 import { AuthenticationRegister, z } from '@vben/common-ui';
 import { $t } from '@vben/locales';
 
+import { message } from 'ant-design-vue';
+
+import { registerApi } from '#/api/core';
+
 defineOptions({ name: 'Register' });
 
 const loading = ref(false);
@@ -81,8 +85,17 @@ const formSchema = computed((): VbenFormSchema[] => {
   ];
 });
 
-function handleSubmit(value: Recordable<any>) {
-  void value;
+async function handleSubmit(value: Recordable<any>) {
+  try {
+    loading.value = true;
+    await registerApi(value);
+    message.success($t('authentication.registerSuccessKind')); // 假设有这个翻译，否则先用中文
+    // message.success('注册成功，请查收邮箱确认后登录');
+  } catch {
+    // Error is handled by request interceptor
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 

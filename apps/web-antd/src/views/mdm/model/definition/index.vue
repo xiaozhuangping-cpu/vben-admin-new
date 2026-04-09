@@ -1,186 +1,28 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
-import { Page, useVbenModal } from '@vben/common-ui';
-import { Ellipsis, Plus } from '@vben/icons';
+import { Page, useVbenDrawer, useVbenModal } from '@vben/common-ui';
 
-import {
-  Button,
-  Card,
-  Col,
-  Dropdown,
-  Menu,
-  message,
-  Row,
-  Space,
-  Tag,
-  Tree,
-} from 'ant-design-vue';
+import { Button, message, Modal, Space, Tag } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import {
+  getModelDefinitionDetailApi,
+  getModelDefinitionListApi,
+  publishModelDefinitionApi,
+  unpublishModelDefinitionApi,
+  upgradeModelDefinitionApi,
+} from '#/api/mdm/model-definition';
 
 import { useColumns } from './data';
-import AuthModal from './modules/auth.vue';
+import FieldsDrawer from './modules/fields.vue';
 import ModelFormModal from './modules/form.vue';
 import VersionModal from './modules/version.vue';
 
-const THEME_TREE_DATA = [
-  {
-    key: 'marketing',
-    title: '一、营销类主数据',
-    children: [
-      { key: 'marketing-01', title: '1、电商平台' },
-      { key: 'marketing-02', title: '2、电商店铺' },
-    ],
-  },
-  {
-    key: 'supply-chain',
-    title: '二、供应链主数据',
-    children: [
-      { key: 'supply-01', title: '1、供应商' },
-      { key: 'supply-02', title: '2、公司主体' },
-    ],
-  },
-  {
-    key: 'finance',
-    title: '三、财务类主数据',
-    children: [
-      { key: 'finance-01', title: '1、币种' },
-      { key: 'finance-02', title: '2、汇率' },
-      { key: 'finance-03', title: '3、费用项目' },
-      { key: 'finance-04', title: '4、支付渠道' },
-    ],
-  },
-  {
-    key: 'admin',
-    title: '四、行政类主数据',
-    children: [
-      { key: 'admin-01', title: '1、组织机构' },
-      { key: 'admin-02', title: '2、员工' },
-      { key: 'admin-03', title: '3、账号' },
-    ],
-  },
-  {
-    key: 'general',
-    title: '五、通用类主数据',
-    children: [
-      { key: 'general-01', title: '1、国家' },
-      { key: 'general-02', title: '2、地区' },
-      { key: 'general-03', title: '3、仓库' },
-      { key: 'general-04', title: '4、物流渠道' },
-    ],
-  },
-];
-
-const MASTER_DATA_ITEMS = [
-  {
-    code: 'MDM_EPLATFORM',
-    name: '电商平台',
-    org: '营销中心',
-    table: 'mdm_e_platform',
-  },
-  {
-    code: 'MDM_ESTORE',
-    name: '电商店铺',
-    org: '营销中心',
-    table: 'mdm_e_store',
-  },
-  {
-    code: 'MDM_SUPPLIER',
-    name: '供应商',
-    org: '供应链部',
-    table: 'mdm_supplier',
-  },
-  {
-    code: 'MDM_LEGAL_ENTITY',
-    name: '公司主体',
-    org: '集团财务',
-    table: 'mdm_legal_entity',
-  },
-  {
-    code: 'MDM_CURRENCY',
-    name: '币种',
-    org: '财务中心',
-    table: 'mdm_currency',
-  },
-  {
-    code: 'MDM_EXRATE',
-    name: '汇率',
-    org: '财务中心',
-    table: 'mdm_exchange_rate',
-  },
-  {
-    code: 'MDM_EXPENSE_ITEM',
-    name: '费用项目',
-    org: '财务中心',
-    table: 'mdm_expense_item',
-  },
-  {
-    code: 'MDM_PAYMENT_CH',
-    name: '支付渠道',
-    org: '财务中心',
-    table: 'mdm_payment_channel',
-  },
-  {
-    code: 'MDM_ORG',
-    name: '组织机构',
-    org: '行政人力',
-    table: 'mdm_organization',
-  },
-  {
-    code: 'MDM_EMPLOYEE',
-    name: '员工',
-    org: '行政人力',
-    table: 'mdm_employee',
-  },
-  {
-    code: 'MDM_ACCOUNT',
-    name: '账号',
-    org: '信息技术',
-    table: 'mdm_account',
-  },
-  { code: 'MDM_COUNTRY', name: '国家', org: '通用支撑', table: 'mdm_country' },
-  { code: 'MDM_REGION', name: '地区', org: '通用支撑', table: 'mdm_region' },
-  {
-    code: 'MDM_WAREHOUSE',
-    name: '仓库',
-    org: '供应链部',
-    table: 'mdm_warehouse',
-  },
-  {
-    code: 'MDM_LOGISTICS_CH',
-    name: '物流渠道',
-    org: '供应链部',
-    table: 'mdm_logistics_channel',
-  },
-];
-
-const MOCK_MODELS = MASTER_DATA_ITEMS.map((item, index) => {
-  return {
-    code: item.code,
-    id: `${index + 1}`,
-    isAudit: true,
-    name: item.name,
-    org: item.org,
-    status: ['draft', 'published', 'revision', 'archived'][index % 4],
-    tableName: item.table,
-    type: ['normal', 'composite', 'inherited', 'related'][index % 4],
-    version: 'v1.0.0',
-  };
-});
-
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
-  archived: { color: 'default', label: '已归档' },
   draft: { color: 'warning', label: '草稿' },
   published: { color: 'success', label: '已发布' },
-  revision: { color: 'processing', label: '修订中' },
-};
-
-const TYPE_MAP: Record<string, { color: string; label: string }> = {
-  composite: { color: 'purple', label: '组合' },
-  inherited: { color: 'cyan', label: '继承' },
-  normal: { color: 'blue', label: '普通' },
-  related: { color: 'orange', label: '关联' },
+  unpublished: { color: 'default', label: '取消发布' },
 };
 
 const [Form, formModalApi] = useVbenModal({
@@ -188,13 +30,32 @@ const [Form, formModalApi] = useVbenModal({
   destroyOnClose: true,
 });
 
+const [Version, versionModalApi] = useVbenModal({
+  connectedComponent: VersionModal,
+  destroyOnClose: true,
+});
+
+const [Fields, fieldsDrawerApi] = useVbenDrawer({
+  connectedComponent: FieldsDrawer,
+  destroyOnClose: true,
+});
+
 const gridOptions: VxeGridProps<any> = {
   columns: useColumns(),
-  data: MOCK_MODELS,
   height: 'auto',
   pagerConfig: {
     enabled: true,
     pageSize: 10,
+  },
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) => {
+        return await getModelDefinitionListApi({
+          page: page.currentPage,
+          pageSize: page.pageSize,
+        });
+      },
+    },
   },
   toolbarConfig: {
     custom: true,
@@ -203,48 +64,137 @@ const gridOptions: VxeGridProps<any> = {
   },
 };
 
-const [Grid] = useVbenVxeGrid({
-  gridOptions,
-});
+const [Grid, gridApi] = useVbenVxeGrid({ gridOptions });
 
-const [Version, versionModalApi] = useVbenModal({
-  connectedComponent: VersionModal,
-});
+async function createUpgradeDraft(row: any) {
+  const newDefinitionId = await upgradeModelDefinitionApi(row.id);
+  const newDraft = newDefinitionId
+    ? await getModelDefinitionDetailApi(String(newDefinitionId))
+    : null;
 
-const [Auth, authModalApi] = useVbenModal({
-  connectedComponent: AuthModal,
-});
+  if (!newDraft) {
+    throw new Error('未获取到升级后的草稿模型');
+  }
+
+  message.success(
+    `已从已发布模型生成升级草稿: ${row.name} v${Number(row.versionNo || 1) + 1}`,
+  );
+  gridApi.reload();
+  return newDraft;
+}
 
 function handleCreate() {
-  formModalApi.setData(null).open();
+  formModalApi
+    .setData({
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
+}
+
+function openEditForm(row: any) {
+  formModalApi
+    .setData({
+      ...row,
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
+}
+
+function openFieldsDrawer(row: any) {
+  fieldsDrawerApi
+    .setData({
+      ...row,
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
 }
 
 function handleEdit(row: any) {
-  formModalApi.setData(row).open();
+  if (row.status !== 'published') {
+    openEditForm(row);
+    return;
+  }
+
+  Modal.confirm({
+    async onOk() {
+      try {
+        const newDraft = await createUpgradeDraft(row);
+        openEditForm(newDraft);
+      } catch {
+        message.error('自动升级失败，请稍后重试');
+      }
+    },
+    title: '当前是已发布模型，编辑前需要先升级为草稿版本，是否继续？',
+  });
 }
 
 function handleConfigFields(row: any) {
-  message.info(`管理字段: ${row.name}`);
-}
+  if (row.status !== 'published') {
+    openFieldsDrawer(row);
+    return;
+  }
 
-function handleAuthorize(row: any) {
-  authModalApi.setData(row).open();
+  Modal.confirm({
+    async onOk() {
+      try {
+        const newDraft = await createUpgradeDraft(row);
+        message.info('已自动打开升级后草稿的字段配置，可继续新增或调整字段。');
+        openFieldsDrawer(newDraft);
+      } catch {
+        message.error('自动升级失败，请稍后重试');
+      }
+    },
+    title: '当前是已发布模型，调整字段前需要先升级为草稿版本，是否继续？',
+  });
 }
 
 function handleVersionHistory(row: any) {
   versionModalApi.setData(row).open();
 }
 
-function handleDelete(row: any) {
-  message.warning(`删除模型: ${row.name}`);
+function handlePublish(row: any) {
+  Modal.confirm({
+    async onOk() {
+      try {
+        await publishModelDefinitionApi(row.id);
+        message.success(`模型已发布: ${row.name}`);
+        gridApi.reload();
+      } catch {
+        message.error('发布失败');
+      }
+    },
+    title: '是否要发布模型？',
+  });
 }
 
-function handleThemeAction(action: string) {
-  message.info(`主题操作: ${action}`);
+function handleUnpublish(row: any) {
+  Modal.confirm({
+    async onOk() {
+      try {
+        await unpublishModelDefinitionApi(row.id);
+        message.success(`已取消发布: ${row.name}`);
+        gridApi.reload();
+      } catch {
+        message.error('取消发布失败');
+      }
+    },
+    title: '是否要取消发布模型？',
+  });
+}
+
+async function handleUpgrade(row: any) {
+  try {
+    const newDraft = await createUpgradeDraft(row);
+    message.info('已自动打开升级后草稿的字段配置，可继续新增或调整字段。');
+    openFieldsDrawer(newDraft);
+  } catch {
+    message.error('升级失败');
+  }
 }
 
 function refreshGrid() {
   message.success('更新成功');
+  gridApi.reload();
 }
 </script>
 
@@ -252,138 +202,63 @@ function refreshGrid() {
   <Page
     auto-content-height
     content-class="flex flex-col"
-    description="在选定的主题下定义主数据模型，包括模型结构、版本状态及其关联关系。支持模型生命周期管理、字段分组配置及对外接口同步。"
+    description="管理主数据模型定义，直接在列表中维护数据主题、字段结构、发布状态与版本历史。"
     title="模型管理"
   >
-    <Row :gutter="16" class="split-layout">
-      <!-- 左侧主题树 -->
-      <Col :span="6" class="split-side">
-        <Card
-          :body-style="{ padding: '12px' }"
-          class="split-card"
-          title="数据主题"
-        >
-          <template #extra>
-            <Space>
-              <Button
-                size="small"
-                type="link"
-                @click="handleThemeAction('新增')"
-              >
-                <Plus class="size-4" />
-              </Button>
-            </Space>
-          </template>
-          <Tree :tree-data="THEME_TREE_DATA" default-expand-all />
-        </Card>
-      </Col>
-
-      <!-- 右侧模型列表 -->
-      <Col :span="18" class="split-main">
-        <div class="split-main__content">
-          <Grid table-title="详情列表">
-            <template #toolbar-tools>
-              <Button type="primary" @click="handleCreate"> 新增模型 </Button>
-            </template>
-
-            <template #type="{ row }">
-              <Tag :color="TYPE_MAP[row.type]?.color">
-                {{ TYPE_MAP[row.type]?.label }}
-              </Tag>
-            </template>
-
-            <template #status="{ row }">
-              <Tag :color="STATUS_MAP[row.status]?.color">
-                {{ STATUS_MAP[row.status]?.label }}
-              </Tag>
-            </template>
-
-            <template #action="{ row }">
-              <Space>
-                <Button size="small" type="link" @click="handleEdit(row)">
-                  编辑
-                </Button>
-                <Button
-                  size="small"
-                  type="link"
-                  @click="handleConfigFields(row)"
-                >
-                  字段
-                </Button>
-                <Dropdown>
-                  <Button size="small" type="link">
-                    更多 <Ellipsis class="size-4" />
-                  </Button>
-                  <template #overlay>
-                    <Menu>
-                      <Menu.Item @click="handleAuthorize(row)">
-                        授权管理
-                      </Menu.Item>
-                      <Menu.Item @click="handleVersionHistory(row)">
-                        版本历史
-                      </Menu.Item>
-                      <Menu.Item class="text-error" @click="handleDelete(row)">
-                        删除
-                      </Menu.Item>
-                    </Menu>
-                  </template>
-                </Dropdown>
-              </Space>
-            </template>
-          </Grid>
-        </div>
-      </Col>
-    </Row>
+    <template #extra>
+      <Button type="primary" @click="handleCreate">新增模型</Button>
+    </template>
 
     <Form @success="refreshGrid" />
-    <Auth />
     <Version />
+    <Fields @success="refreshGrid" />
+
+    <div class="flex-1 min-h-0">
+      <Grid table-title="数据模型列表">
+        <template #status="{ row }">
+          <Tag :color="STATUS_MAP[row.status]?.color">
+            {{ STATUS_MAP[row.status]?.label }}
+          </Tag>
+        </template>
+
+        <template #action="{ row }">
+          <Space wrap>
+            <Button size="small" type="link" @click="handleEdit(row)">
+              编辑
+            </Button>
+            <Button size="small" type="link" @click="handleConfigFields(row)">
+              字段配置
+            </Button>
+            <Button size="small" type="link" @click="handleVersionHistory(row)">
+              版本历史
+            </Button>
+            <Button
+              v-if="row.status === 'draft'"
+              size="small"
+              type="link"
+              @click="handlePublish(row)"
+            >
+              发布
+            </Button>
+            <Button
+              v-if="row.status === 'published'"
+              size="small"
+              type="link"
+              @click="handleUnpublish(row)"
+            >
+              取消发布
+            </Button>
+            <Button
+              v-if="row.status === 'published'"
+              size="small"
+              type="link"
+              @click="handleUpgrade(row)"
+            >
+              升级
+            </Button>
+          </Space>
+        </template>
+      </Grid>
+    </div>
   </Page>
 </template>
-
-<style scoped>
-.split-layout {
-  flex-wrap: nowrap;
-  height: 100%;
-  min-height: 0;
-}
-
-.split-side,
-.split-main {
-  display: flex;
-  min-height: 0;
-}
-
-.split-main {
-  flex-direction: column;
-  min-width: 0;
-}
-
-.split-main__content {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  min-height: 0;
-}
-
-.split-card {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.split-card :deep(.ant-card-head) {
-  flex-shrink: 0;
-}
-
-.split-card :deep(.ant-card-body) {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.text-error {
-  color: #ff4d4f;
-}
-</style>

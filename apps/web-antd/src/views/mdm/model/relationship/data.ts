@@ -1,5 +1,3 @@
-import type { VxeGridProps } from '#/adapter/vxe-table';
-
 export function useColumns() {
   return [
     { type: 'seq', width: 50 },
@@ -79,7 +77,7 @@ export function useSchema() {
     {
       field: 'remark',
       label: '备注',
-      component: 'InputTextArea',
+      component: 'Textarea',
     },
   ];
 }

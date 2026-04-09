@@ -1,5 +1,4 @@
 import type { VbenFormSchema } from '#/adapter/form';
-import type { VxeGridProps } from '#/adapter/vxe-table';
 
 export const useColumns = (): Array<any> => [
   { title: '序号', type: 'seq', width: 60 },
@@ -90,7 +89,7 @@ export const useSchema = (): VbenFormSchema[] => [
     defaultValue: 'daily',
   },
   {
-    component: 'InputTextArea',
+    component: 'Textarea',
     componentProps: {
       placeholder: '配置详情 (JSON or Script)...',
     },

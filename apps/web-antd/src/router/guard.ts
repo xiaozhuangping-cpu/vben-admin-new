@@ -9,6 +9,7 @@ import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
 
 import { generateAccess } from './access';
+import { ensureDynamicMdmDataRoutes } from './dynamic-mdm-data';
 
 /**
  * 通用守卫配置
@@ -90,9 +91,28 @@ function setupAccessGuard(router: Router) {
       return true;
     }
 
-    // 生成路由表
-    // 当前登录用户拥有的角色标识列表
-    const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
+    await ensureDynamicMdmDataRoutes(router);
+
+    let userInfo;
+    try {
+      // 生成路由表
+      // 当前登录用户拥有的角色标识列表
+      userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
+    } catch {
+      accessStore.setAccessToken(null);
+      accessStore.setRefreshToken(null);
+      accessStore.setIsAccessChecked(false);
+
+      return {
+        path: LOGIN_PATH,
+        query:
+          to.fullPath === preferences.app.defaultHomePath
+            ? {}
+            : { redirect: encodeURIComponent(to.fullPath) },
+        replace: true,
+      };
+    }
+
     const userRoles = userInfo.roles ?? [];
 
     // 生成菜单和路由

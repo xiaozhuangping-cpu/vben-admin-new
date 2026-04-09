@@ -1,18 +1,24 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
-import { Page, useVbenModal } from '@vben/common-ui';
+import { Page, useVbenDrawer, useVbenModal } from '@vben/common-ui';
 
-import { Button, message, Space } from 'ant-design-vue';
+import { Button, message, Space, Tag } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { deleteThemeApi, getThemeListApi } from '#/api/mdm/theme';
+import { deleteUserGroupApi, getUserGroupListApi } from '#/api/mdm/user-group';
 
 import { useColumns } from './data';
-import FormModal from './modules/form.vue';
+import AssignUsersModal from './modules/assign-users.vue';
+import UserGroupFormModal from './modules/form.vue';
 
 const [Form, formModalApi] = useVbenModal({
-  connectedComponent: FormModal,
+  connectedComponent: UserGroupFormModal,
+  destroyOnClose: true,
+});
+
+const [AssignUsersDrawer, assignUsersDrawerApi] = useVbenDrawer({
+  connectedComponent: AssignUsersModal,
   destroyOnClose: true,
 });
 
@@ -26,7 +32,7 @@ const gridOptions: VxeGridProps<any> = {
   proxyConfig: {
     ajax: {
       query: async ({ page }) => {
-        return await getThemeListApi({
+        return await getUserGroupListApi({
           page: page.currentPage,
           pageSize: page.pageSize,
         });
@@ -61,10 +67,19 @@ function handleEdit(row: any) {
     .open();
 }
 
+function handleAssignUsers(row: any) {
+  assignUsersDrawerApi
+    .setData({
+      ...row,
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
+}
+
 async function handleDelete(row: any) {
   try {
-    await deleteThemeApi(row.id);
-    message.success(`已删除数据主题: ${row.name}`);
+    await deleteUserGroupApi(row.id);
+    message.success(`已删除用户组: ${row.name}`);
     gridApi.reload();
   } catch {
     message.error('删除失败');
@@ -72,7 +87,8 @@ async function handleDelete(row: any) {
 }
 
 function refreshGrid() {
-  gridApi.reload();
+  message.success('数据已更新');
+  // gridApi.query();
 }
 </script>
 
@@ -80,21 +96,30 @@ function refreshGrid() {
   <Page
     auto-content-height
     content-class="flex flex-col"
-    description="对主数据资产进行宏观分类，为后续的模型构建提供维度支撑。"
-    title="数据主题管理"
+    description="对系统内部的用户进行分组，以便于进行批量的权限管理和业务隔离。"
+    title="用户组管理"
   >
     <template #extra>
-      <Button type="primary" @click="handleCreate"> 新增主题 </Button>
+      <Button type="primary" @click="handleCreate"> 新增用户组 </Button>
     </template>
 
     <Form @success="refreshGrid" />
+    <AssignUsersDrawer @success="refreshGrid" />
 
     <div class="flex-1 min-h-0">
-      <Grid table-title="主题列表">
+      <Grid table-title="用户组列表">
+        <template #status="{ row }">
+          <Tag :color="row.status ? 'green' : 'red'">
+            {{ row.status ? '启用' : '禁用' }}
+          </Tag>
+        </template>
         <template #action="{ row }">
           <Space>
             <Button size="small" type="link" @click="handleEdit(row)">
               编辑
+            </Button>
+            <Button size="small" type="link" @click="handleAssignUsers(row)">
+              分配用户
             </Button>
             <Button danger size="small" type="link" @click="handleDelete(row)">
               删除

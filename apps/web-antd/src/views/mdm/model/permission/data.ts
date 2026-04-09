@@ -1,5 +1,3 @@
-import type { VxeGridProps } from '#/adapter/vxe-table';
-
 export function useColumns() {
   return [
     { type: 'seq', width: 50 },
@@ -76,7 +74,7 @@ export function useSchema() {
     {
       field: 'rule',
       label: '具体过滤规则',
-      component: 'InputTextArea',
+      component: 'Textarea',
       ifShow: ({ values }) => values.scope === 'custom',
     },
     {

@@ -4,6 +4,10 @@ import { computed, ref } from 'vue';
 import { useVbenModal } from '@vben/common-ui';
 
 import { useVbenForm } from '#/adapter/form';
+import {
+  createModelDefinitionApi,
+  updateModelDefinitionApi,
+} from '#/api/mdm/model-definition';
 
 import { useSchema } from '../data';
 
@@ -23,22 +27,36 @@ const [Form, formApi] = useVbenForm({
 const [Modal, modalApi] = useVbenModal({
   async onConfirm() {
     const { valid } = await formApi.validate();
-    if (valid) {
-      modalApi.lock();
+    if (!valid) {
+      return;
+    }
+    modalApi.lock();
+    try {
       const values = await formApi.getValues();
-      console.log('Model data:', values);
-      setTimeout(() => {
-        modalApi.lock(false);
-        modalApi.close();
-        emit('success');
-      }, 500);
+      await (currentData.value?.id
+        ? updateModelDefinitionApi(currentData.value.id, {
+            ...values,
+            versionNo: currentData.value.versionNo,
+          } as any)
+        : createModelDefinitionApi({
+            ...values,
+            versionNo: 1,
+          } as any));
+      currentData.value?.onSuccess?.();
+      emit('success');
+      modalApi.close();
+    } finally {
+      modalApi.lock(false);
     }
   },
   onOpenChange(isOpen) {
     if (isOpen) {
       const data = modalApi.getData<any>();
       currentData.value = data;
-      formApi.setValues(data || {});
+      formApi.setValues({
+        ...data,
+        themeId: data?.themeId ?? data?.theme_id,
+      });
     }
   },
 });

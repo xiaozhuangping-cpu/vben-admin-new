@@ -1,7 +1,11 @@
 <script lang="ts" setup>
 import { computed, nextTick, ref } from 'vue';
+
 import { useVbenModal } from '@vben/common-ui';
+
 import { useVbenForm } from '#/adapter/form';
+import { createUserApi, updateUserApi } from '#/api/mdm/user';
+
 import { useSchema } from '../data';
 
 const emit = defineEmits(['success']);
@@ -22,13 +26,17 @@ const [Modal, modalApi] = useVbenModal({
     const { valid } = await formApi.validate();
     if (valid) {
       modalApi.lock();
-      const values = await formApi.getValues();
-      console.log('User saved:', values);
-      setTimeout(() => {
+      try {
+        const values = await formApi.getValues();
+        await (currentData.value?.id
+          ? updateUserApi(currentData.value.id, values as any)
+          : createUserApi(values as any));
+        emit('success');
         modalApi.lock(false);
         modalApi.close();
-        emit('success');
-      }, 500);
+      } finally {
+        modalApi.lock(false);
+      }
     }
   },
   onOpenChange(isOpen) {

@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import { useVbenModal } from '@vben/common-ui';
 
 import { useVbenForm } from '#/adapter/form';
-import { createThemeApi, updateThemeApi } from '#/api/mdm/theme';
+import { createUserGroupApi, updateUserGroupApi } from '#/api/mdm/user-group';
 
 import { useSchema } from '../data';
 
@@ -12,7 +12,7 @@ const emit = defineEmits(['success']);
 const currentData = ref<any>(null);
 
 const getTitle = computed(() => {
-  return currentData.value?.id ? '编辑数据主题' : '新增数据主题';
+  return currentData.value?.id ? '编辑用户组' : '新增用户组';
 });
 
 const [Form, formApi] = useVbenForm({
@@ -29,8 +29,8 @@ const [Modal, modalApi] = useVbenModal({
       try {
         const values = await formApi.getValues();
         await (currentData.value?.id
-          ? updateThemeApi(currentData.value.id, values)
-          : createThemeApi(values));
+          ? updateUserGroupApi(currentData.value.id, values)
+          : createUserGroupApi(values));
         modalApi.close();
         currentData.value?.onSuccess?.();
         emit('success');

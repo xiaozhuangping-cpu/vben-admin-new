@@ -1,6 +1,8 @@
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
+import type { ModelField } from '#/api/mdm/model-definition';
+
 export const useColumns = (
   routeName?: string,
 ): VxeGridProps<any>['columns'] => {
@@ -62,6 +64,100 @@ export const useColumns = (
   ];
 };
 
+export const buildDynamicColumns = (
+  fields: ModelField[],
+): VxeGridProps<any>['columns'] => {
+  const mapped = fields.map((field) => ({
+    field: field.code.toLowerCase(),
+    minWidth: 150,
+    title: field.name,
+  }));
+
+  return [
+    { title: '序号', type: 'seq', width: 60 },
+    ...mapped,
+    { field: 'created_at', title: '创建时间', width: 180 },
+    { field: 'updated_at', title: '更新时间', width: 180 },
+    {
+      fixed: 'right',
+      slots: { default: 'action' },
+      title: '操作',
+      width: 220,
+    },
+  ];
+};
+
+export const buildDynamicFormSchema = (
+  fields: ModelField[],
+): VbenFormSchema[] => {
+  return fields
+    .filter((field) => field.status !== false)
+    .toSorted((a, b) => Number(a.sort ?? 10) - Number(b.sort ?? 10))
+    .map((field) => {
+      const fieldName = field.code.toLowerCase();
+      const common = {
+        fieldName,
+        help: field.remarks || undefined,
+        label: field.name,
+      } satisfies Partial<VbenFormSchema>;
+
+      if (field.dataType === 'boolean') {
+        return {
+          ...common,
+          component: 'Switch',
+          defaultValue: false,
+        } satisfies VbenFormSchema;
+      }
+
+      if (field.dataType === 'date') {
+        return {
+          ...common,
+          component: 'DatePicker',
+          componentProps: {
+            placeholder: `请选择${field.name}`,
+            valueFormat: 'YYYY-MM-DD',
+          },
+        } satisfies VbenFormSchema;
+      }
+
+      if (field.dataType === 'timestamptz') {
+        return {
+          ...common,
+          component: 'DatePicker',
+          componentProps: {
+            placeholder: `请选择${field.name}`,
+            showTime: true,
+            valueFormat: 'YYYY-MM-DD HH:mm:ss',
+          },
+        } satisfies VbenFormSchema;
+      }
+
+      if (field.dataType === 'int4' || field.dataType === 'numeric') {
+        return {
+          ...common,
+          component: 'InputNumber',
+          componentProps: {
+            min: 0,
+            placeholder: `请输入${field.name}`,
+            precision:
+              field.dataType === 'numeric' ? (field.precision ?? 2) : 0,
+            style: { width: '100%' },
+          },
+        } satisfies VbenFormSchema;
+      }
+
+      return {
+        ...common,
+        component: field.length && field.length > 120 ? 'Textarea' : 'Input',
+        componentProps: {
+          maxlength: field.length ?? undefined,
+          placeholder: `请输入${field.name}`,
+        },
+        rules: field.isRequired ? 'required' : undefined,
+      } satisfies VbenFormSchema;
+    });
+};
+
 export const useSchema = (): VbenFormSchema[] => [
   {
     component: 'Input',
@@ -96,7 +192,7 @@ export const useSchema = (): VbenFormSchema[] => [
     defaultValue: 'pending',
   },
   {
-    component: 'InputTextArea',
+    component: 'Textarea',
     componentProps: {
       placeholder: '其他属性数据...',
     },

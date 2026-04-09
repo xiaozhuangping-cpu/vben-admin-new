@@ -96,7 +96,7 @@ export const useSchema = (): VbenFormSchema[] => [
     defaultValue: true,
   },
   {
-    component: 'InputTextArea',
+    component: 'Textarea',
     componentProps: {
       placeholder: '请输入注释',
     },
