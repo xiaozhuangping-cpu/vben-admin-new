@@ -2,12 +2,12 @@ import type { Router } from 'vue-router';
 
 import type { RouteRecordStringComponent } from '@vben/types';
 
-import { accessRoutes } from './routes';
-
 import {
   getDynamicMasterDataChildrenRoutes,
   loadDynamicMasterDataItems,
 } from '#/views/mdm/data/shared/master-data';
+
+import { accessRoutes } from './routes';
 
 let loaded = false;
 

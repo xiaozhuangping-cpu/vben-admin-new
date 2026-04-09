@@ -1,4 +1,5 @@
 import { requestClient } from '#/api/request';
+
 import { getAssignableUserListApi } from './user-member';
 
 export interface UserGroup {
@@ -47,7 +48,7 @@ export async function getUserGroupListApi(params: any = {}) {
     Array.isArray(response.data?.data) ? response.data.data : []
   ).map((item: any) => {
     const userIds = Array.isArray(item.user_ids)
-      ? item.user_ids.map((id: string) => String(id))
+      ? item.user_ids.map(String)
       : [];
 
     return {

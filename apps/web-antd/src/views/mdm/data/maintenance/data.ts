@@ -1,6 +1,5 @@
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeGridProps } from '#/adapter/vxe-table';
-
 import type { ModelField } from '#/api/mdm/model-definition';
 
 export const useColumns = (
@@ -148,7 +147,7 @@ export const buildDynamicFormSchema = (
 
       return {
         ...common,
-        component: field.length && field.length > 120 ? 'Textarea' : 'Input',
+        component: (field.length ?? 0) > 120 ? 'Textarea' : 'Input',
         componentProps: {
           maxlength: field.length ?? undefined,
           placeholder: `请输入${field.name}`,

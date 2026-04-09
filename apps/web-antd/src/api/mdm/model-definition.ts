@@ -26,9 +26,9 @@ export interface ModelField {
   isPrimary?: boolean;
   isRequired?: boolean;
   isUnique?: boolean;
-  length?: number | null;
+  length?: null | number;
   name: string;
-  precision?: number | null;
+  precision?: null | number;
   remarks?: string;
   sort?: number;
   status?: boolean;

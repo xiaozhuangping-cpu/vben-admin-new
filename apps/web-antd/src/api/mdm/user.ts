@@ -7,7 +7,7 @@ export interface MdmUser {
   org?: string;
   roles?: string[];
   status: boolean;
-  lastLogin?: string | null;
+  lastLogin?: null | string;
   createdAt?: string;
 }
 

@@ -108,7 +108,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       if (contentRange) {
         const totalStr = contentRange.split('/').pop();
         if (totalStr) {
-          total = parseInt(totalStr, 10);
+          total = Number.parseInt(totalStr, 10);
         }
       }
 
