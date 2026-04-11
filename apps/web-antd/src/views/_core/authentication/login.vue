@@ -36,7 +36,9 @@ const formSchema = computed((): VbenFormSchema[] => {
         options: MOCK_USER_OPTIONS,
         placeholder: $t('authentication.selectAccount'),
       },
+      defaultValue: 'vben',
       fieldName: 'selectAccount',
+      hide: true,
       label: $t('authentication.selectAccount'),
       rules: z
         .string()
@@ -49,6 +51,7 @@ const formSchema = computed((): VbenFormSchema[] => {
       componentProps: {
         placeholder: $t('authentication.usernameTip'),
       },
+      defaultValue: 'vben',
       dependencies: {
         trigger(values, form) {
           if (values.selectAccount) {
@@ -74,6 +77,7 @@ const formSchema = computed((): VbenFormSchema[] => {
       componentProps: {
         placeholder: $t('authentication.password'),
       },
+      defaultValue: '123456',
       fieldName: 'password',
       label: $t('authentication.password'),
       rules: z.string().min(1, { message: $t('authentication.passwordTip') }),
@@ -95,6 +99,7 @@ const formSchema = computed((): VbenFormSchema[] => {
     :loading="authStore.loginLoading"
     :show-code-login="false"
     :show-qrcode-login="false"
+    :show-register="false"
     :show-third-party-login="false"
     @submit="authStore.authLogin"
   />

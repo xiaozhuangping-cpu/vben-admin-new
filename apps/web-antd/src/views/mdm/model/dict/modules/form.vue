@@ -1,7 +1,11 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
+
 import { useVbenModal } from '@vben/common-ui';
+
 import { useVbenForm } from '#/adapter/form';
+import { createDictApi, updateDictApi } from '#/api/mdm/dict';
+
 import { useSchema } from '../data';
 
 const emit = defineEmits(['success']);
@@ -20,15 +24,19 @@ const [Form, formApi] = useVbenForm({
 const [Modal, modalApi] = useVbenModal({
   async onConfirm() {
     const { valid } = await formApi.validate();
-    if (valid) {
-      modalApi.lock();
+    if (!valid) {
+      return;
+    }
+
+    modalApi.lock();
+    try {
       const values = await formApi.getValues();
-      console.log('Dict saved:', values);
-      setTimeout(() => {
-        modalApi.lock(false);
-        modalApi.close();
-        emit('success');
-      }, 500);
+      await (currentData.value?.id ? updateDictApi(currentData.value.id, values as any) : createDictApi(values as any));
+      currentData.value?.onSuccess?.();
+      emit('success');
+      modalApi.close();
+    } finally {
+      modalApi.lock(false);
     }
   },
   onOpenChange(isOpen) {

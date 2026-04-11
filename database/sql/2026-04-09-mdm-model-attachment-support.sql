@@ -84,6 +84,8 @@ begin
       when 'date' then 'date'
       when 'timestamptz' then 'timestamp with time zone'
       when 'attachment' then 'jsonb'
+      when 'dict' then 'varchar(255)'
+      when 'relation_master' then 'uuid'
       else 'text'
     end;
 

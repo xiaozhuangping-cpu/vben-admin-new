@@ -53,8 +53,39 @@ const [Modal, modalApi] = useVbenModal({
     if (isOpen) {
       const data = modalApi.getData<any>();
       currentData.value = data;
+      const isReadonlyStatus = ['history', 'published', 'revised'].includes(
+        data?.status,
+      );
+      const isSortReadonlyStatus = ['history', 'revised'].includes(
+        data?.status,
+      );
+      formApi.updateSchema([
+        { fieldName: 'code', componentProps: { disabled: isReadonlyStatus } },
+        {
+          fieldName: 'enabled',
+          componentProps: { disabled: isReadonlyStatus },
+        },
+        {
+          fieldName: 'modelType',
+          componentProps: { disabled: isReadonlyStatus },
+        },
+        {
+          fieldName: 'sortNo',
+          componentProps: { disabled: isSortReadonlyStatus },
+        },
+        {
+          fieldName: 'themeId',
+          componentProps: { disabled: isReadonlyStatus },
+        },
+      ]);
       formApi.setValues({
         ...data,
+        auditGroupId: data?.auditGroupId ?? data?.audit_group_id,
+        enabled: data?.enabled ?? true,
+        modelType: data?.modelType ?? data?.model_type ?? 'normal',
+        needAudit: data?.needAudit ?? data?.need_audit ?? false,
+        remark: data?.remark ?? data?.description ?? '',
+        sortNo: data?.sortNo ?? data?.sort_no ?? 0,
         themeId: data?.themeId ?? data?.theme_id,
       });
     }

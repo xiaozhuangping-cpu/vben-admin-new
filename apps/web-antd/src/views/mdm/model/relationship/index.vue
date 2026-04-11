@@ -1,32 +1,33 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
+
 import { Page, useVbenModal } from '@vben/common-ui';
-import { Button, message, Space, Tag } from 'ant-design-vue';
+
+import { Button, message, Modal, Space, Tag } from 'ant-design-vue';
+
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { Plus } from '@vben/icons';
+import {
+  deleteModelRelationshipApi,
+  getModelRelationshipListApi,
+  obsoleteModelRelationshipApi,
+  publishModelRelationshipApi,
+} from '#/api/mdm/model-relationship';
+
 import { useColumns } from './data';
 import RelationshipFormModal from './modules/form.vue';
 
-const MOCK_RELATIONSHIPS = [
-  {
-    id: '1',
-    sourceModel: '客户主体 (CUSTOMER)',
-    targetModel: '联系人 (CONTACT)',
-    type: '1:N',
-    sourceField: 'ID',
-    targetField: 'CUST_ID',
-    remark: '一个客户可以有多个联系人',
-  },
-  {
-    id: '2',
-    sourceModel: '物料主数据 (MATERIAL)',
-    targetModel: '计量单位 (UOM)',
-    type: 'N:1',
-    sourceField: 'UOM_ID',
-    targetField: 'ID',
-    remark: '物料关联基本单位',
-  },
-];
+const STATUS_MAP: Record<string, { color: string; label: string }> = {
+  draft: { color: 'warning', label: '草稿' },
+  published: { color: 'success', label: '已发布' },
+  obsolete: { color: 'default', label: '作废' },
+};
+
+const RELATION_TYPE_MAP: Record<string, string> = {
+  '1:1': '一对一',
+  '1:N': '一对多',
+  'N:1': '多对一',
+  'N:N': '多对多',
+};
 
 const [Form, formModalApi] = useVbenModal({
   connectedComponent: RelationshipFormModal,
@@ -35,11 +36,20 @@ const [Form, formModalApi] = useVbenModal({
 
 const gridOptions: VxeGridProps<any> = {
   columns: useColumns(),
-  data: MOCK_RELATIONSHIPS,
   height: 'auto',
   pagerConfig: {
     enabled: true,
     pageSize: 10,
+  },
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) => {
+        return await getModelRelationshipListApi({
+          page: page.currentPage,
+          pageSize: page.pageSize,
+        });
+      },
+    },
   },
   toolbarConfig: {
     custom: true,
@@ -48,20 +58,88 @@ const gridOptions: VxeGridProps<any> = {
   },
 };
 
-const [Grid] = useVbenVxeGrid({
+const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions,
 });
 
 function handleCreate() {
-  formModalApi.setData(null).open();
+  formModalApi
+    .setData({
+      sort: 10,
+      status: 'draft',
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
 }
 
 function handleEdit(row: any) {
-  formModalApi.setData(row).open();
+  if (row.status !== 'draft') {
+    message.warning('只有草稿状态的模型关系才能编辑');
+    return;
+  }
+
+  formModalApi
+    .setData({
+      ...row,
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
 }
 
-function handleDelete(row: any) {
-  message.warning(`删除关系: ${row.id}`);
+async function handleDelete(row: any) {
+  if (row.status !== 'draft') {
+    message.warning('只有草稿状态的模型关系才能删除');
+    return;
+  }
+
+  Modal.confirm({
+    async onOk() {
+      try {
+        await deleteModelRelationshipApi(row.id);
+        message.success(
+          `已删除模型关系: ${row.sourceModelName} -> ${row.targetModelName}`,
+        );
+        gridApi.reload();
+      } catch {
+        message.error('删除失败');
+      }
+    },
+    title: '是否删除当前模型关系？',
+  });
+}
+
+function handlePublish(row: any) {
+  Modal.confirm({
+    async onOk() {
+      try {
+        await publishModelRelationshipApi(row.id);
+        message.success('模型关系已发布');
+        gridApi.reload();
+      } catch {
+        message.error('发布失败');
+      }
+    },
+    title: '是否发布当前模型关系？',
+  });
+}
+
+function handleObsolete(row: any) {
+  Modal.confirm({
+    async onOk() {
+      try {
+        await obsoleteModelRelationshipApi(row.id);
+        message.success('模型关系已作废');
+        gridApi.reload();
+      } catch {
+        message.error('作废失败');
+      }
+    },
+    title: '是否将当前模型关系置为作废？',
+  });
+}
+
+function refreshGrid() {
+  gridApi.reload();
 }
 </script>
 
@@ -69,31 +147,62 @@ function handleDelete(row: any) {
   <Page
     auto-content-height
     content-class="flex flex-col"
-    description="管理主数据模型之间的逻辑关联（一对一、一对多等），为数据维护阶段的级联操作与关联录入提供依据。"
+    description="管理主数据模型之间的关系定义，并通过草稿、发布、作废状态控制变更窗口。"
     title="模型关系"
   >
     <template #extra>
-      <Button type="primary" @click="handleCreate">
-        <Plus class="size-4" /> 新增关系
-      </Button>
+      <Button type="primary" @click="handleCreate">新增关系</Button>
     </template>
 
-    <Form @success="() => Grid.reload()" />
+    <Form @success="refreshGrid" />
 
     <div class="flex-1 min-h-0">
       <Grid table-title="关系列表">
-        <template #type="{ row }">
-          <Tag color="cyan">{{ row.type }}</Tag>
+        <template #relationType="{ row }">
+          {{ RELATION_TYPE_MAP[row.relationType] ?? row.relationType }}
+        </template>
+
+        <template #status="{ row }">
+          <Tag :color="STATUS_MAP[row.status]?.color">
+            {{ STATUS_MAP[row.status]?.label ?? row.status }}
+          </Tag>
         </template>
 
         <template #action="{ row }">
-          <Space>
-            <Button size="small" type="link" @click="handleEdit(row)"
-              >编辑</Button
+          <Space wrap>
+            <Button
+              v-if="row.status === 'draft'"
+              size="small"
+              type="link"
+              @click="handleEdit(row)"
             >
-            <Button danger size="small" type="link" @click="handleDelete(row)"
-              >删除</Button
+              编辑
+            </Button>
+            <Button
+              v-if="row.status === 'draft'"
+              size="small"
+              type="link"
+              @click="handlePublish(row)"
             >
+              发布
+            </Button>
+            <Button
+              v-if="row.status === 'draft'"
+              danger
+              size="small"
+              type="link"
+              @click="handleDelete(row)"
+            >
+              删除
+            </Button>
+            <Button
+              v-if="row.status === 'draft' || row.status === 'published'"
+              size="small"
+              type="link"
+              @click="handleObsolete(row)"
+            >
+              作废
+            </Button>
           </Space>
         </template>
       </Grid>

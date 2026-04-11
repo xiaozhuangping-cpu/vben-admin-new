@@ -19,7 +19,11 @@ const routes: RouteRecordRaw[] = [
         path: 'overview',
         component: () => import('#/views/mdm/overview/index.vue'),
         meta: {
+          affixTab: true,
+          affixTabOrder: 1,
           icon: 'lucide:cpu',
+          keepAlive: true,
+          tabClosable: false,
           title: '概览',
         },
       },
@@ -29,7 +33,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       icon: 'lucide:database',
       order: 100,
-      title: '数据建模',
+      title: '模型中心',
     },
     component: BasicLayout,
     name: 'MdmModel',
@@ -41,7 +45,8 @@ const routes: RouteRecordRaw[] = [
         path: 'theme',
         component: () => import('#/views/mdm/model/theme/index.vue'),
         meta: {
-          title: '数据主题',
+          keepAlive: true,
+          title: '模型主题',
         },
       },
       {
@@ -49,7 +54,30 @@ const routes: RouteRecordRaw[] = [
         path: 'definition',
         component: () => import('#/views/mdm/model/definition/index.vue'),
         meta: {
-          title: '数据模型',
+          keepAlive: true,
+          title: '模型定义',
+        },
+      },
+      {
+        name: 'MdmModelDefinitionManage',
+        path: 'definition/manage/:id',
+        component: () =>
+          import('#/views/mdm/model/definition/manage/index.vue'),
+        meta: {
+          hideInMenu: true,
+          keepAlive: true,
+          title: '模型设计',
+        },
+      },
+      {
+        name: 'MdmModelDefinitionPreview',
+        path: 'definition/preview/:id',
+        component: () =>
+          import('#/views/mdm/model/definition/preview/index.vue'),
+        meta: {
+          hideInMenu: true,
+          keepAlive: true,
+          title: '模型预览',
         },
       },
       {
@@ -57,15 +85,8 @@ const routes: RouteRecordRaw[] = [
         path: 'version',
         component: () => import('#/views/mdm/model/version/index.vue'),
         meta: {
+          keepAlive: true,
           title: '模型版本',
-        },
-      },
-      {
-        name: 'MdmModelField',
-        path: 'field',
-        component: () => import('#/views/mdm/model/field/index.vue'),
-        meta: {
-          title: '字段配置',
         },
       },
       {
@@ -73,6 +94,7 @@ const routes: RouteRecordRaw[] = [
         path: 'relationship',
         component: () => import('#/views/mdm/model/relationship/index.vue'),
         meta: {
+          keepAlive: true,
           title: '模型关系',
         },
       },
@@ -81,15 +103,17 @@ const routes: RouteRecordRaw[] = [
         path: 'rule',
         component: () => import('#/views/mdm/model/rule/index.vue'),
         meta: {
+          keepAlive: true,
           title: '校验规则',
         },
       },
       {
         name: 'MdmModelNumbering',
         path: 'numbering',
-        component: () => import('#/views/mdm/model/numbering/index.vue'),
+        component: () => import('#/views/mdm/model/numbering/index-v2.vue'),
         meta: {
-          title: '编码管理',
+          keepAlive: true,
+          title: '编码设计',
         },
       },
       {
@@ -97,7 +121,8 @@ const routes: RouteRecordRaw[] = [
         path: 'dict',
         component: () => import('#/views/mdm/model/dict/index.vue'),
         meta: {
-          title: '数据字典',
+          keepAlive: true,
+          title: '模型字典',
         },
       },
       {
@@ -105,6 +130,7 @@ const routes: RouteRecordRaw[] = [
         path: 'permission',
         component: () => import('#/views/mdm/model/permission/index.vue'),
         meta: {
+          keepAlive: true,
           title: '数据权限',
         },
       },
@@ -114,7 +140,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       icon: 'lucide:layers',
       order: 110,
-      title: '主数据管理',
+      title: '主数据中心',
     },
     component: BasicLayout,
     name: 'MdmData',
@@ -127,7 +153,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/mdm/data/audit/index.vue'),
         meta: {
           hideInMenu: true,
-          title: '数据审核',
+          keepAlive: true,
+          title: '主数据审核',
         },
       },
     ],
@@ -148,7 +175,8 @@ const routes: RouteRecordRaw[] = [
         path: 'collection',
         component: () => import('#/views/mdm/integration/collection/index.vue'),
         meta: {
-          title: '数据归集',
+          keepAlive: true,
+          title: '数据采集',
         },
       },
       {
@@ -157,6 +185,7 @@ const routes: RouteRecordRaw[] = [
         component: () =>
           import('#/views/mdm/integration/distribution/index.vue'),
         meta: {
+          keepAlive: true,
           title: '数据分发',
         },
       },
@@ -178,7 +207,8 @@ const routes: RouteRecordRaw[] = [
         path: 'user',
         component: () => import('#/views/mdm/system/user/index.vue'),
         meta: {
-          title: '人员账号',
+          keepAlive: true,
+          title: '用户管理',
         },
       },
       {
@@ -186,6 +216,7 @@ const routes: RouteRecordRaw[] = [
         path: 'role',
         component: () => import('#/views/mdm/system/role/index.vue'),
         meta: {
+          keepAlive: true,
           title: '角色管理',
         },
       },
@@ -194,7 +225,8 @@ const routes: RouteRecordRaw[] = [
         path: 'permission',
         component: () => import('#/views/mdm/system/permission/index.vue'),
         meta: {
-          title: '权限配置',
+          keepAlive: true,
+          title: '权限管理',
         },
       },
       {
@@ -202,6 +234,7 @@ const routes: RouteRecordRaw[] = [
         path: 'user-group',
         component: () => import('#/views/mdm/system/user-group/index.vue'),
         meta: {
+          keepAlive: true,
           title: '用户组管理',
         },
       },
@@ -210,6 +243,7 @@ const routes: RouteRecordRaw[] = [
         path: 'menu',
         component: () => import('#/views/mdm/system/menu/index.vue'),
         meta: {
+          keepAlive: true,
           title: '菜单管理',
         },
       },

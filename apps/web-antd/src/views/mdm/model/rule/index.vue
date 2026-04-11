@@ -1,59 +1,37 @@
 <script lang="ts" setup>
+import type { Key } from 'ant-design-vue/es/_util/type';
+
 import type { VxeGridProps } from '#/adapter/vxe-table';
+
+import { ref } from 'vue';
+
 import { Page, useVbenModal } from '@vben/common-ui';
+import { Plus } from '@vben/icons';
+
 import {
   Button,
+  Card,
+  Col,
   message,
+  Modal,
+  Row,
   Space,
   Tag,
-  Row,
-  Col,
-  Card,
   Tree,
 } from 'ant-design-vue';
+
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { Plus } from '@vben/icons';
+import { getThemeListApi } from '#/api/mdm/theme';
+import {
+  deleteValidationRuleApi,
+  getValidationRuleListApi,
+} from '#/api/mdm/validation-rule';
+
 import { useColumns } from './data';
 import RuleFormModal from './modules/form.vue';
 
-const MOCK_RULES = [
-  {
-    id: '1',
-    model: '客户主体 (CUSTOMER)',
-    field: 'EMAIL',
-    name: '邮箱格式校验',
-    type: 'regex',
-    rule: '^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$',
-    msg: '请输入有效的电子邮箱地址',
-    status: true,
-  },
-  {
-    id: '2',
-    model: '物料主数据 (MATERIAL)',
-    field: 'CODE',
-    name: '编码唯一性',
-    type: 'unique',
-    rule: 'Global.Unique',
-    msg: '该物料编码已存在',
-    status: true,
-  },
-  {
-    id: '3',
-    model: '基础信息 (BASE)',
-    field: 'WEIGHT',
-    name: '重量范围',
-    type: 'range',
-    rule: '[0, 1000]',
-    msg: '重量必须在 0 到 1000 之间',
-    status: false,
-  },
-];
-
-const THEME_TREE = [
-  { title: '客户主题', key: 'customer' },
-  { title: '物料主题', key: 'material' },
-  { title: '员工主题', key: 'employee' },
-];
+const themeTree = ref<any[]>([{ title: '全部主题', key: 'all' }]);
+const selectedThemeId = ref<string>('all');
 
 const [Form, formModalApi] = useVbenModal({
   connectedComponent: RuleFormModal,
@@ -62,29 +40,80 @@ const [Form, formModalApi] = useVbenModal({
 
 const gridOptions: VxeGridProps<any> = {
   columns: useColumns(),
-  data: MOCK_RULES,
   height: 'auto',
   pagerConfig: {
     enabled: true,
     pageSize: 10,
   },
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) =>
+        await getValidationRuleListApi({
+          page: page.currentPage,
+          pageSize: page.pageSize,
+          ...(selectedThemeId.value === 'all'
+            ? {}
+            : { theme_id: `eq.${selectedThemeId.value}` }),
+        }),
+    },
+  },
 };
 
-const [Grid] = useVbenVxeGrid({
+const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions,
 });
 
 function handleCreate() {
-  formModalApi.setData(null).open();
+  formModalApi
+    .setData({
+      onSuccess: () => gridApi.reload(),
+      themeId:
+        selectedThemeId.value === 'all' ? undefined : selectedThemeId.value,
+    })
+    .open();
 }
 
 function handleEdit(row: any) {
-  formModalApi.setData(row).open();
+  formModalApi
+    .setData({
+      ...row,
+      onSuccess: () => gridApi.reload(),
+    })
+    .open();
 }
 
 function handleDelete(row: any) {
-  message.warning(`删除校验规则: ${row.name}`);
+  Modal.confirm({
+    async onOk() {
+      try {
+        await deleteValidationRuleApi(row.id);
+        message.success(`已删除校验规则: ${row.name}`);
+        gridApi.reload();
+      } catch {
+        message.error('删除校验规则失败');
+      }
+    },
+    title: `是否删除校验规则 ${row.name}？`,
+  });
 }
+
+function handleTreeSelect(keys: Key[]) {
+  selectedThemeId.value = String(keys[0] ?? 'all');
+  gridApi.reload();
+}
+
+async function loadThemes() {
+  const { items } = await getThemeListApi({ pageSize: 1000 });
+  themeTree.value = [
+    { title: '全部主题', key: 'all' },
+    ...items.map((item: any) => ({
+      title: item.name,
+      key: item.id,
+    })),
+  ];
+}
+
+loadThemes();
 </script>
 
 <template>
@@ -97,7 +126,12 @@ function handleDelete(row: any) {
     <Row :gutter="16" class="split-layout">
       <Col :span="5" class="split-side">
         <Card title="主题树" class="split-card">
-          <Tree :tree-data="THEME_TREE" default-expand-all />
+          <Tree
+            :selected-keys="[selectedThemeId]"
+            :tree-data="themeTree"
+            default-expand-all
+            @select="handleTreeSelect"
+          />
         </Card>
       </Col>
       <Col :span="19" class="split-main">
@@ -110,27 +144,28 @@ function handleDelete(row: any) {
             </template>
 
             <template #type="{ row }">
-              <Tag color="blue">{{ row.type.toUpperCase() }}</Tag>
+              <Tag color="blue">{{ row.ruleType.toUpperCase() }}</Tag>
             </template>
 
             <template #status="{ row }">
-              <Tag :color="row.status ? 'success' : 'error'">
+              <Tag :color="row.status ? 'success' : 'default'">
                 {{ row.status ? '启用' : '禁用' }}
               </Tag>
             </template>
 
             <template #action="{ row }">
               <Space>
-                <Button size="small" type="link" @click="handleEdit(row)"
-                  >编辑</Button
-                >
+                <Button size="small" type="link" @click="handleEdit(row)">
+编辑
+</Button>
                 <Button
                   danger
                   size="small"
                   type="link"
                   @click="handleDelete(row)"
-                  >删除</Button
-                >
+                  >
+删除
+</Button>
               </Space>
             </template>
           </Grid>
@@ -138,7 +173,7 @@ function handleDelete(row: any) {
       </Col>
     </Row>
 
-    <Form @success="() => Grid.reload()" />
+    <Form @success="() => gridApi.reload()" />
   </Page>
 </template>
 

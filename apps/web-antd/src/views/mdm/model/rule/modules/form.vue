@@ -1,7 +1,14 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
+
 import { useVbenModal } from '@vben/common-ui';
+
 import { useVbenForm } from '#/adapter/form';
+import {
+  createValidationRuleApi,
+  updateValidationRuleApi,
+} from '#/api/mdm/validation-rule';
+
 import { useSchema } from '../data';
 
 const emit = defineEmits(['success']);
@@ -20,15 +27,19 @@ const [Form, formApi] = useVbenForm({
 const [Modal, modalApi] = useVbenModal({
   async onConfirm() {
     const { valid } = await formApi.validate();
-    if (valid) {
-      modalApi.lock();
+    if (!valid) {
+      return;
+    }
+
+    modalApi.lock();
+    try {
       const values = await formApi.getValues();
-      console.log('Rule saved:', values);
-      setTimeout(() => {
-        modalApi.lock(false);
-        modalApi.close();
-        emit('success');
-      }, 500);
+      await (currentData.value?.id ? updateValidationRuleApi(currentData.value.id, values as any) : createValidationRuleApi(values as any));
+      currentData.value?.onSuccess?.();
+      emit('success');
+      modalApi.close();
+    } finally {
+      modalApi.lock(false);
     }
   },
   onOpenChange(isOpen) {

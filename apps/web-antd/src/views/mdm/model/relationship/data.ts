@@ -1,83 +1,107 @@
-export function useColumns() {
-  return [
-    { type: 'seq', width: 50 },
-    { field: 'sourceModel', title: '原模型', minWidth: 120 },
-    { field: 'targetModel', title: '关联模型', minWidth: 120 },
-    {
-      field: 'type',
-      title: '关系类型',
-      width: 120,
-      slots: { default: 'type' },
-    },
-    { field: 'sourceField', title: '关联主键', width: 120 },
-    { field: 'targetField', title: '外键字段', width: 120 },
-    { field: 'remark', title: '备注', minWidth: 180 },
-    {
-      field: 'action',
-      title: '操作',
-      width: 140,
-      slots: { default: 'action' },
-      fixed: 'right',
-    },
-  ];
-}
+import type { VbenFormSchema } from '#/adapter/form';
+import type { VxeGridProps } from '#/adapter/vxe-table';
 
-export function useSchema() {
-  return [
-    {
-      field: 'sourceModel',
-      label: '原模型',
-      component: 'Select',
-      required: true,
-      componentProps: {
-        options: [
-          { label: '客户主体', value: 'customer' },
-          { label: '物料主数据', value: 'material' },
-        ],
-      },
+import { getModelRelationshipOptionsApi } from '#/api/mdm/model-relationship';
+
+export const useColumns = (): VxeGridProps<any>['columns'] => [
+  { type: 'seq', width: 60 },
+  { field: 'sourceModelName', title: '源模型', minWidth: 180 },
+  { field: 'targetModelName', title: '关联模型', minWidth: 180 },
+  {
+    field: 'relationType',
+    title: '关系类型',
+    width: 120,
+    slots: { default: 'relationType' },
+  },
+  {
+    field: 'status',
+    title: '状态',
+    width: 100,
+    slots: { default: 'status' },
+  },
+  { field: 'sourceField', title: '关联主键', width: 140 },
+  { field: 'targetField', title: '外键字段', width: 140 },
+  { field: 'remark', title: '备注', minWidth: 180 },
+  { field: 'updatedAt', title: '更新时间', width: 180 },
+  {
+    field: 'action',
+    title: '操作',
+    width: 220,
+    slots: { default: 'action' },
+    fixed: 'right',
+  },
+];
+
+export const useSchema = (): VbenFormSchema[] => [
+  {
+    component: 'ApiSelect',
+    componentProps: {
+      api: getModelRelationshipOptionsApi,
+      placeholder: '请选择源模型',
     },
-    {
-      field: 'targetModel',
-      label: '关联模型',
-      component: 'Select',
-      required: true,
-      componentProps: {
-        options: [
-          { label: '联系人', value: 'contact' },
-          { label: '地址信息', value: 'address' },
-        ],
-      },
+    fieldName: 'sourceDefinitionId',
+    label: '源模型',
+    rules: 'required',
+  },
+  {
+    component: 'ApiSelect',
+    componentProps: {
+      api: getModelRelationshipOptionsApi,
+      placeholder: '请选择关联模型',
     },
-    {
-      field: 'type',
-      label: '关系类型',
-      component: 'Select',
-      required: true,
-      componentProps: {
-        options: [
-          { label: '一对一 (1:1)', value: '1:1' },
-          { label: '一对多 (1:N)', value: '1:N' },
-          { label: '多对一 (N:1)', value: 'N:1' },
-          { label: '多对多 (N:N)', value: 'N:N' },
-        ],
-      },
+    fieldName: 'targetDefinitionId',
+    label: '关联模型',
+    rules: 'required',
+  },
+  {
+    component: 'Select',
+    componentProps: {
+      options: [
+        { label: '一对一 (1:1)', value: '1:1' },
+        { label: '一对多 (1:N)', value: '1:N' },
+        { label: '多对一 (N:1)', value: 'N:1' },
+        { label: '多对多 (N:N)', value: 'N:N' },
+      ],
+      placeholder: '请选择关系类型',
     },
-    {
-      field: 'sourceField',
-      label: '关联主键',
-      component: 'Input',
-      required: true,
+    fieldName: 'relationType',
+    label: '关系类型',
+    rules: 'required',
+  },
+  {
+    component: 'Input',
+    componentProps: {
+      placeholder: '请输入源字段，例如 ID',
     },
-    {
-      field: 'targetField',
-      label: '外键字段',
-      component: 'Input',
-      required: true,
+    fieldName: 'sourceField',
+    label: '关联主键',
+    rules: 'required',
+  },
+  {
+    component: 'Input',
+    componentProps: {
+      placeholder: '请输入目标字段，例如 CUSTOMER_ID',
     },
-    {
-      field: 'remark',
-      label: '备注',
-      component: 'Textarea',
+    fieldName: 'targetField',
+    label: '外键字段',
+    rules: 'required',
+  },
+  {
+    component: 'InputNumber',
+    componentProps: {
+      min: 0,
+      placeholder: '请输入排序值',
     },
-  ];
-}
+    fieldName: 'sort',
+    label: '排序',
+  },
+  {
+    component: 'Textarea',
+    componentProps: {
+      placeholder: '请输入备注',
+      rows: 3,
+    },
+    fieldName: 'remark',
+    label: '备注',
+  },
+];

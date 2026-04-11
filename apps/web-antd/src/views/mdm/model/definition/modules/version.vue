@@ -6,6 +6,7 @@ import { useVbenModal } from '@vben/common-ui';
 import { Button, Space, Table, Tag } from 'ant-design-vue';
 
 import { getModelVersionListApi } from '#/api/mdm/model-definition';
+import { formatDateTime } from '#/utils/date';
 
 const columns = [
   {
@@ -64,6 +65,9 @@ const [Modal, modalApi] = useVbenModal({
             <Tag :color="record.status === 'published' ? 'green' : 'default'">
               {{ record.status }}
             </Tag>
+          </template>
+          <template v-else-if="column.key === 'createdAt'">
+            {{ formatDateTime(record.createdAt) }}
           </template>
           <template v-else-if="column.key === 'action'">
             <Space>

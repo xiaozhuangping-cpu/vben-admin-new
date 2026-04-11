@@ -1,25 +1,29 @@
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
-export function useColumns() {
+import { getThemeListApi } from '#/api/mdm/theme';
+
+export function useColumns(): VxeGridProps<any>['columns'] {
   return [
     { type: 'seq', width: 50 },
-    { field: 'model', title: '适用模型', width: 140 },
-    { field: 'field', title: '适用字段', width: 140 },
+    { field: 'themeName', title: '所属主题', width: 140 },
     { field: 'name', title: '规则名称', minWidth: 150 },
+    { field: 'code', title: '规则编码', width: 160 },
     {
-      field: 'type',
+      field: 'ruleType',
       title: '规则类型',
       width: 120,
       slots: { default: 'type' },
     },
-    { field: 'rule', title: '校验逻辑', minWidth: 150 },
-    { field: 'msg', title: '错误提示', minWidth: 200 },
+    { field: 'expression', title: '校验逻辑', minWidth: 180 },
+    { field: 'errorMessage', title: '错误提示', minWidth: 200 },
+    { field: 'sortNo', title: '排序', width: 90 },
     {
       field: 'status',
       title: '启用状态',
       width: 100,
       slots: { default: 'status' },
     },
+    { field: 'updatedAt', title: '更新时间', width: 180 },
     {
       field: 'action',
       title: '操作',
@@ -33,38 +37,34 @@ export function useColumns() {
 export function useSchema() {
   return [
     {
-      field: 'model',
-      label: '适用模型',
-      component: 'Select',
-      required: true,
+      fieldName: 'themeId',
+      label: '所属主题',
+      component: 'ApiSelect',
       componentProps: {
-        options: [
-          { label: '客户主体 (CUSTOMER)', value: 'customer' },
-          { label: '物料主数据 (MATERIAL)', value: 'material' },
-        ],
+        api: async () => {
+          const { items } = await getThemeListApi({ pageSize: 1000 });
+          return items.map((item: any) => ({
+            label: item.name,
+            value: item.id,
+          }));
+        },
+        placeholder: '请选择所属主题',
       },
     },
     {
-      field: 'field',
-      label: '适用字段',
-      component: 'Select',
-      required: true,
-      componentProps: {
-        options: [
-          { label: '编码 (CODE)', value: 'code' },
-          { label: '电子邮箱 (EMAIL)', value: 'email' },
-          { label: '权重 (WEIGHT)', value: 'weight' },
-        ],
-      },
-    },
-    {
-      field: 'name',
+      fieldName: 'name',
       label: '规则名称',
       component: 'Input',
       required: true,
     },
     {
-      field: 'type',
+      fieldName: 'code',
+      label: '规则编码',
+      component: 'Input',
+      required: true,
+    },
+    {
+      fieldName: 'ruleType',
       label: '规则类型',
       component: 'Select',
       required: true,
@@ -73,27 +73,41 @@ export function useSchema() {
           { label: '正则表达式', value: 'regex' },
           { label: '唯一性校验', value: 'unique' },
           { label: '数值范围', value: 'range' },
-          { label: '非空校验', value: 'not_null' },
+          { label: '长度范围', value: 'length' },
+          { label: '自定义表达式', value: 'expression' },
         ],
       },
     },
     {
-      field: 'rule',
+      fieldName: 'expression',
       label: '校验表达式 / 逻辑',
       component: 'Input',
-      required: true,
     },
     {
-      field: 'msg',
+      fieldName: 'errorMessage',
       label: '错误提示信息',
       component: 'Input',
       required: true,
     },
     {
-      field: 'status',
+      fieldName: 'sortNo',
+      label: '排序',
+      component: 'InputNumber',
+      defaultValue: 0,
+      componentProps: {
+        min: 0,
+      },
+    },
+    {
+      fieldName: 'status',
       label: '是否启用',
       component: 'Switch',
       defaultValue: true,
+    },
+    {
+      fieldName: 'remark',
+      label: '备注',
+      component: 'Textarea',
     },
   ];
 }

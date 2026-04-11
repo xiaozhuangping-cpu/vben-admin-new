@@ -2,11 +2,42 @@ import type { VxeTableGridOptions } from '@vben/plugins/vxe-table';
 
 import { h } from 'vue';
 
-import { setupVbenVxeTable, useVbenVxeGrid } from '@vben/plugins/vxe-table';
+import {
+  setupVbenVxeTable,
+  useVbenVxeGrid as useRawVbenVxeGrid,
+} from '@vben/plugins/vxe-table';
 
 import { Button, Image } from 'ant-design-vue';
 
+import { formatDateTime } from '#/utils/date';
+
 import { useVbenForm } from './form';
+
+const DATE_TIME_FIELD_PATTERN =
+  /(?:authExpiry|createTime|createdAt|created_at|publishTime|submitTime|updateTime|updatedAt|updated_at)$/i;
+
+function normalizeColumns(columns: any[] = []) {
+  return columns.map((column) => {
+    const nextColumn = { ...column };
+
+    if (Array.isArray(nextColumn.children) && nextColumn.children.length > 0) {
+      nextColumn.children = normalizeColumns(nextColumn.children);
+    }
+
+    const field = typeof nextColumn.field === 'string' ? nextColumn.field : '';
+    if (
+      field &&
+      DATE_TIME_FIELD_PATTERN.test(field) &&
+      !nextColumn.formatter &&
+      !nextColumn.slots
+    ) {
+      nextColumn.formatter = ({ cellValue }: { cellValue?: string }) =>
+        formatDateTime(cellValue);
+    }
+
+    return nextColumn;
+  });
+}
 
 setupVbenVxeTable({
   configVxeTable: (vxeUI) => {
@@ -64,6 +95,18 @@ setupVbenVxeTable({
   },
   useVbenForm,
 });
+
+function useVbenVxeGrid(options: any) {
+  const nextOptions = {
+    ...options,
+    gridOptions: {
+      ...options.gridOptions,
+      columns: normalizeColumns(options.gridOptions?.columns ?? []),
+    },
+  };
+
+  return useRawVbenVxeGrid(nextOptions);
+}
 
 export { useVbenVxeGrid };
 

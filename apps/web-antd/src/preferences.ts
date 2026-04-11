@@ -6,11 +6,10 @@ import { defineOverridesPreferences } from '@vben/preferences';
  * !!! 更改配置后请清空缓存，否则可能不生效
  */
 export const overridesPreferences = defineOverridesPreferences({
-  // overrides
   app: {
     accessMode: 'frontend',
     defaultHomePath: '/dashboard/overview',
-    name: 'JC-MDM | 智能主数据',
+    name: 'JC-MDM 主数据',
   },
   logo: {
     source: '/src/assets/logo-iot.png',
