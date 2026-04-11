@@ -37,7 +37,7 @@ export interface ModelField {
   defaultValue?: string;
   definitionId: string;
   definitionStatus?: string;
-  dictCode?: string | null;
+  dictCode?: null | string;
   dictName?: string;
   id?: string;
   isCodeField?: boolean;
@@ -144,7 +144,7 @@ function buildInFilter(values: string[]) {
     return '';
   }
   const sanitized = values
-    .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+    .map((value) => `"${String(value).replaceAll('"', '""')}"`)
     .join(',');
   return `in.(${sanitized})`;
 }
@@ -560,7 +560,7 @@ export async function getModelFieldListApi(definitionId: string) {
     ...new Set(
       rawItems
         .map((item: any) => (item.dict_code ? String(item.dict_code) : ''))
-        .filter((value) => value),
+        .filter(Boolean),
     ),
   ];
   const relatedDefinitionIds = [
@@ -569,7 +569,7 @@ export async function getModelFieldListApi(definitionId: string) {
         .map((item: any) =>
           item.related_definition_id ? String(item.related_definition_id) : '',
         )
-        .filter((value) => value),
+        .filter(Boolean),
     ),
   ];
 

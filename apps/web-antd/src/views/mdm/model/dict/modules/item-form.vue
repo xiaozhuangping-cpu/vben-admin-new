@@ -80,13 +80,15 @@ const [Modal, modalApi] = useVbenModal({
     modalApi.lock();
     try {
       const values = await formApi.getValues();
-      await (currentData.value?.id ? updateDictItemApi(currentData.value.id, {
-          ...(values as any),
-          dictId: currentData.value.dictId,
-        }) : createDictItemApi({
-          ...(values as any),
-          dictId: currentData.value.dictId,
-        }));
+      await (currentData.value?.id
+        ? updateDictItemApi(currentData.value.id, {
+            ...(values as any),
+            dictId: currentData.value.dictId,
+          })
+        : createDictItemApi({
+            ...(values as any),
+            dictId: currentData.value.dictId,
+          }));
       emit('success');
       currentData.value?.onSuccess?.();
       modalApi.close();

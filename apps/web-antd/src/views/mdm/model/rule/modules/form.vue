@@ -34,7 +34,9 @@ const [Modal, modalApi] = useVbenModal({
     modalApi.lock();
     try {
       const values = await formApi.getValues();
-      await (currentData.value?.id ? updateValidationRuleApi(currentData.value.id, values as any) : createValidationRuleApi(values as any));
+      await (currentData.value?.id
+        ? updateValidationRuleApi(currentData.value.id, values as any)
+        : createValidationRuleApi(values as any));
       currentData.value?.onSuccess?.();
       emit('success');
       modalApi.close();

@@ -173,8 +173,8 @@ function handleDeleteItem(row: any) {
           <div>
             当前字典:
             <Tag color="blue">
-{{ selectedDict?.name }} ({{ selectedDict?.code }})
-</Tag>
+              {{ selectedDict?.name }} ({{ selectedDict?.code }})
+            </Tag>
           </div>
           <Button type="primary" size="small" @click="handleCreateItem">
             <Plus class="size-4" /> 新增条目
@@ -190,24 +190,26 @@ function handleDeleteItem(row: any) {
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'status'">
               <Tag :color="record.status ? 'success' : 'default'">
-{{
-                record.status ? '启用' : '禁用'
-              }}
-</Tag>
+                {{ record.status ? '启用' : '禁用' }}
+              </Tag>
             </template>
             <template v-else-if="column.key === 'action'">
               <Space>
-                <Button type="link" size="small" @click="handleEditItem(record)">
-编辑
-</Button>
+                <Button
+                  type="link"
+                  size="small"
+                  @click="handleEditItem(record)"
+                >
+                  编辑
+                </Button>
                 <Button
                   type="link"
                   danger
                   size="small"
                   @click="handleDeleteItem(record)"
-                  >
-删除
-</Button>
+                >
+                  删除
+                </Button>
               </Space>
             </template>
           </template>
@@ -232,14 +234,14 @@ function handleDeleteItem(row: any) {
         <template #action="{ row }">
           <Space>
             <Button size="small" type="link" @click="handleManageItems(row)">
-条目
-</Button>
+              条目
+            </Button>
             <Button size="small" type="link" @click="handleEdit(row)">
-编辑
-</Button>
+              编辑
+            </Button>
             <Button danger size="small" type="link" @click="handleDelete(row)">
-删除
-</Button>
+              删除
+            </Button>
           </Space>
         </template>
       </Grid>

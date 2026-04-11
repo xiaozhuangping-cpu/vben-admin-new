@@ -1108,8 +1108,8 @@ onMounted(async () => {
 
           <div class="mb-4 flex flex-wrap gap-2">
             <Tag color="blue">
-版本 {{ currentDefinition?.versionNo || '-' }}
-</Tag>
+              版本 {{ currentDefinition?.versionNo || '-' }}
+            </Tag>
             <Tag :color="currentDefinition?.enabled ? 'success' : 'default'">
               {{ currentDefinition?.enabled ? '已启用' : '已禁用' }}
             </Tag>
@@ -1286,11 +1286,11 @@ onMounted(async () => {
                     重新生成
                   </Button>
                   <Button :disabled="!isEditable" @click="addSection">
-新增分区
-</Button>
+                    新增分区
+                  </Button>
                   <Button type="primary" @click="saveDisplayConfig">
-保存设计
-</Button>
+                    保存设计
+                  </Button>
                 </Space>
               </div>
 

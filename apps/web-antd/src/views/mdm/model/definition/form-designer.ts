@@ -63,12 +63,12 @@ export function getDefaultComponent(dataType?: string) {
     case 'timestamptz': {
       return 'DatePicker';
     }
+    case 'dict': {
+      return 'Dict';
+    }
     case 'int4':
     case 'numeric': {
       return 'InputNumber';
-    }
-    case 'dict': {
-      return 'Dict';
     }
     case 'text': {
       return 'Textarea';

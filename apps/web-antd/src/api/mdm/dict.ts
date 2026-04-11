@@ -51,7 +51,7 @@ export async function getDictListApi(params: any = {}) {
     requestClient.get<any>('/supabase-mdm/mdm_dict_items', {
       params: {
         select: 'dict_id',
-        limit: 10000,
+        limit: 10_000,
       },
       responseReturn: 'raw',
     }),

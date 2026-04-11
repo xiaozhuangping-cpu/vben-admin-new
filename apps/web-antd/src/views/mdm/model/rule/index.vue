@@ -156,16 +156,16 @@ loadThemes();
             <template #action="{ row }">
               <Space>
                 <Button size="small" type="link" @click="handleEdit(row)">
-编辑
-</Button>
+                  编辑
+                </Button>
                 <Button
                   danger
                   size="small"
                   type="link"
                   @click="handleDelete(row)"
-                  >
-删除
-</Button>
+                >
+                  删除
+                </Button>
               </Space>
             </template>
           </Grid>
