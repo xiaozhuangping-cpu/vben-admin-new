@@ -11,6 +11,7 @@ import { notification } from 'ant-design-vue';
 import { defineStore } from 'pinia';
 
 import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api';
+import { clearCurrentRbacContextCache } from '#/api/core/rbac-context';
 import { $t } from '#/locales';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -19,6 +20,14 @@ export const useAuthStore = defineStore('auth', () => {
   const router = useRouter();
 
   const loginLoading = ref(false);
+
+  function resetAccessCache() {
+    clearCurrentRbacContextCache();
+    accessStore.setAccessCodes([]);
+    accessStore.setAccessMenus([]);
+    accessStore.setAccessRoutes([]);
+    accessStore.setIsAccessChecked(false);
+  }
 
   /**
    * 异步处理登录操作
@@ -33,12 +42,14 @@ export const useAuthStore = defineStore('auth', () => {
     let userInfo: null | UserInfo = null;
     try {
       loginLoading.value = true;
+      resetAccessCache();
       const { accessToken, refreshToken } = await loginApi(params);
 
       // 如果成功获取到 accessToken
       if (accessToken) {
         accessStore.setAccessToken(accessToken);
         accessStore.setRefreshToken(refreshToken ?? null);
+        resetAccessCache();
 
         // 获取用户信息并存储到 accessStore 中
         const [fetchUserInfoResult, accessCodes] = await Promise.all([
@@ -87,7 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     resetAllStores();
     accessStore.setAccessToken(null);
     accessStore.setRefreshToken(null);
-    accessStore.setIsAccessChecked(false);
+    resetAccessCache();
     accessStore.setLoginExpired(false);
 
     // 回登录页带上当前路由地址

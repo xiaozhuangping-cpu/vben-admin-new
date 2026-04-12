@@ -30,36 +30,28 @@ async function generateAccessible(
   const accessibleRoutes = await generateRoutes(mode, options);
 
   const root = router.getRoutes().find((item) => item.path === '/');
-
-  // 获取已有的路由名称列表
-  const names = root?.children?.map((item) => item.name) ?? [];
+  const rootChildren: RouteRecordRaw[] = [];
 
   // 动态添加到router实例内
   accessibleRoutes.forEach((route) => {
     if (root && !route.meta?.noBasicLayout) {
-      // 为了兼容之前的版本用法，如果包含子路由，则将component移除，以免出现多层BasicLayout
-      // 如果你的项目已经跟进了本次修改，移除了所有自定义菜单首级的BasicLayout，可以将这段if代码删除
+      // 后端权限模式下按本次授权结果重建 Root.children，
+      // 避免旧账号残留或静态业务路由持续挂在根布局下。
       if (route.children && route.children.length > 0) {
         delete route.component;
       }
-      // 根据router name判断，如果路由已经存在，则不再添加
-      if (names?.includes(route.name)) {
-        // 找到已存在的路由索引并更新，不更新会造成切换用户时，一级目录未更新，homePath 在二级目录导致的404问题
-        const index = root.children?.findIndex(
-          (item) => item.name === route.name,
-        );
-        if (index !== undefined && index !== -1 && root.children) {
-          root.children[index] = route;
-        }
-      } else {
-        root.children?.push(route);
-      }
+
+      rootChildren.push(route);
     } else {
+      if (route.name && router.hasRoute(route.name)) {
+        router.removeRoute(route.name);
+      }
       router.addRoute(route);
     }
   });
 
   if (root) {
+    root.children = rootChildren;
     if (root.name) {
       router.removeRoute(root.name);
     }

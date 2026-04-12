@@ -20,6 +20,8 @@ import { useAuthStore } from '#/store';
 import { refreshTokenApi } from './core';
 
 const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   const client = new RequestClient({
@@ -73,14 +75,24 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   client.addRequestInterceptor({
     fulfilled: async (config) => {
       const accessStore = useAccessStore();
+      const requestUrl = `${config.url || ''}`;
+
+      // Bypass the local Vite proxy for Supabase endpoints to avoid intermittent
+      // 502 errors from the dev proxy layer.
+      if (SUPABASE_URL && requestUrl.startsWith('/supabase-mdm/')) {
+        config.baseURL = `${SUPABASE_URL}/rest/v1`;
+        config.url = requestUrl.replace(/^\/supabase-mdm/, '');
+      } else if (SUPABASE_URL && requestUrl.startsWith('/auth/')) {
+        config.baseURL = `${SUPABASE_URL}/auth/v1`;
+        config.url = requestUrl.replace(/^\/auth/, '');
+      }
 
       config.headers.Authorization = formatToken(accessStore.accessToken);
       config.headers['Accept-Language'] = preferences.app.locale;
 
       // Supabase apikey header
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      if (anonKey) {
-        config.headers.apikey = anonKey;
+      if (SUPABASE_ANON_KEY) {
+        config.headers.apikey = SUPABASE_ANON_KEY;
       }
 
       return config;
@@ -140,13 +152,22 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
     }),
   );
 
-  // Supabase 在 token 过期时可能返回 403 bad_jwt，这里统一转成 401，
-  // 交给后面的认证拦截器走刷新/重新登录逻辑。
+  // Supabase 在 token 过期时可能返回 403 bad_jwt 或 {"message": "JWT expired"} 等，
+  // 这里统一转成 401，交给后面的认证拦截器走静默刷新或重新登录逻辑。
   client.addResponseInterceptor({
     rejected: async (error) => {
       const response = error?.response;
-      const errorCode = response?.data?.error_code;
-      if (response?.status === 403 && errorCode === 'bad_jwt') {
+      const responseData = response?.data;
+      
+      // 捕获 Supabase 常见的 JWT 失效错误
+      const isJwtError = 
+        response?.status === 403 && (
+          responseData?.error_code === 'bad_jwt' || 
+          responseData?.message?.includes('JWT') ||
+          responseData?.msg?.includes('JWT')
+        );
+
+      if (isJwtError) {
         response.status = 401;
       }
       throw error;

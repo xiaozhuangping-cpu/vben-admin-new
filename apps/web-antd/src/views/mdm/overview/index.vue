@@ -25,7 +25,7 @@ const overviewItems: AnalysisOverviewItem[] = [
   {
     icon: SvgCardIcon,
     title: '全栈类目',
-    totalTitle: '智能家居全品类主题',
+    totalTitle: '家居全品类主题',
     totalValue: 12,
     value: 4,
   },
@@ -67,7 +67,7 @@ const chartTabs: TabOption[] = [
 <template>
   <div class="p-5">
     <div class="mb-5">
-      <h2 class="text-2xl font-bold">JC-MDM 智能主数据控制台</h2>
+      <h2 class="text-2xl font-bold">JC-MDM 主数据控制台</h2>
       <p class="text-gray-500">
         实时监控主数据模型的生命周期、数据增长及质量健康度。
       </p>

@@ -1,4 +1,5 @@
 import { requestClient } from '#/api/request';
+import { withRequestCache } from './_cache';
 
 import { getAssignableUserListApi } from './user-member';
 
@@ -14,57 +15,59 @@ export interface UserGroup {
 }
 
 export async function getUserGroupListApi(params: any = {}) {
-  const { page = 1, pageSize = 10, ...rest } = params;
-  const response = await requestClient.get<any>(
-    '/supabase-mdm/mdm_user_groups',
-    {
-      params: {
-        ...rest,
-        select: '*',
-        order: rest.order ?? 'updated_at.desc,created_at.desc',
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+  return withRequestCache('mdm_user_groups:list', params, async () => {
+    const { page = 1, pageSize = 10, ...rest } = params;
+    const response = await requestClient.get<any>(
+      '/supabase-mdm/mdm_user_groups',
+      {
+        params: {
+          ...rest,
+          select: '*',
+          order: rest.order ?? 'updated_at.desc,created_at.desc',
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+        },
+        headers: {
+          Prefer: 'count=exact',
+        },
+        responseReturn: 'raw',
       },
-      headers: {
-        Prefer: 'count=exact',
-      },
-      responseReturn: 'raw',
-    },
-  );
+    );
 
-  const contentRange =
-    response.headers?.['content-range'] ?? response.headers?.['Content-Range'];
-  const totalFromHeader = contentRange
-    ? Number.parseInt(contentRange.split('/').pop() || '0', 10)
-    : 0;
-  const assignableUsers = await getAssignableUserListApi();
-  const userNameMap = new Map(
-    assignableUsers.map((user) => [
-      String(user.id),
-      user.nickname || user.label,
-    ]),
-  );
-  const items = (
-    Array.isArray(response.data?.data) ? response.data.data : []
-  ).map((item: any) => {
-    const userIds = Array.isArray(item.user_ids)
-      ? item.user_ids.map(String)
-      : [];
+    const contentRange =
+      response.headers?.['content-range'] ?? response.headers?.['Content-Range'];
+    const totalFromHeader = contentRange
+      ? Number.parseInt(contentRange.split('/').pop() || '0', 10)
+      : 0;
+    const assignableUsers = await getAssignableUserListApi();
+    const userNameMap = new Map(
+      assignableUsers.map((user) => [
+        String(user.id),
+        user.nickname || user.label,
+      ]),
+    );
+    const items = (
+      Array.isArray(response.data?.data) ? response.data.data : []
+    ).map((item: any) => {
+      const userIds = Array.isArray(item.user_ids)
+        ? item.user_ids.map(String)
+        : [];
+
+      return {
+        ...item,
+        createTime: item.created_at ?? item.createTime,
+        userIds,
+        userNames: userIds
+          .map((id: string) => userNameMap.get(id))
+          .filter(Boolean),
+      };
+    });
 
     return {
-      ...item,
-      createTime: item.created_at ?? item.createTime,
-      userIds,
-      userNames: userIds
-        .map((id: string) => userNameMap.get(id))
-        .filter(Boolean),
+      items,
+      total: response.data?.total ?? totalFromHeader,
     };
   });
-
-  return {
-    items,
-    total: response.data?.total ?? totalFromHeader,
-  };
 }
 
 export async function createUserGroupApi(data: UserGroup) {

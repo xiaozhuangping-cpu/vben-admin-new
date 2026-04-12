@@ -27,14 +27,43 @@ export namespace AuthApi {
   }
 }
 
+async function resolveLoginEmail(loginName?: string) {
+  const identifier = (loginName || '').trim();
+
+  if (!identifier) {
+    return '';
+  }
+
+  if (identifier.includes('@')) {
+    return identifier;
+  }
+
+  try {
+    const response = await requestClient.get<any[]>('/supabase-mdm/mdm_users', {
+      params: {
+        username: `eq.${identifier}`,
+        select: 'username,auth_email',
+        limit: 1,
+      },
+    });
+
+    const matchedUser = Array.isArray(response) ? response[0] : null;
+    return matchedUser?.auth_email || identifier;
+  } catch (error) {
+    console.warn('Failed to resolve login email by username', error);
+    return identifier;
+  }
+}
+
 /**
  * 登录
  */
 export async function loginApi(data: AuthApi.LoginParams) {
+  const resolvedEmail = await resolveLoginEmail(data.username);
   const response = await requestClient.post<any>(
     '/auth/token?grant_type=password',
     {
-      email: data.username,
+      email: resolvedEmail,
       password: data.password,
     },
   );
@@ -105,5 +134,5 @@ export async function logoutApi() {
  * 获取用户权限码
  */
 export async function getAccessCodesApi() {
-  return ['*']; // 默认返回 * 表示所有权限，实际可根据 Supabase user_metadata 过滤
+  return [];
 }
