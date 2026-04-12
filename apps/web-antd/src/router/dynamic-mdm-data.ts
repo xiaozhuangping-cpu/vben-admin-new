@@ -36,10 +36,14 @@ export async function ensureDynamicMdmDataRoutes(router: Router) {
     }
 
     if (!router.hasRoute(String(route.name))) {
-      router.addRoute('MdmData', {
-        ...route,
-        path: toAbsoluteMdmDataPath(String(route.path)),
-      });
+      // 只有当父级路由已经注册到 router 中时，才手动添加动态子路由
+      // 否则，在 generateAccess 过程中会通过 accessRoutes 中的引用自动注册
+      if (router.hasRoute('MdmData')) {
+        router.addRoute('MdmData', {
+          ...route,
+          path: toAbsoluteMdmDataPath(String(route.path)),
+        });
+      }
     }
   }
 }

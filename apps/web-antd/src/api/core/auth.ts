@@ -136,3 +136,12 @@ export async function logoutApi() {
 export async function getAccessCodesApi() {
   return [];
 }
+
+/**
+ * 修改密码
+ */
+export async function updatePasswordApi(password: string) {
+  return requestClient.put('/auth/user', {
+    password,
+  });
+}
