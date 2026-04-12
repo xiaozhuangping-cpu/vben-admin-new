@@ -11,6 +11,7 @@ export default defineConfig(async () => {
             rewrite: (path) => path.replace(/^\/api\/supabase-mdm/, ''),
             // Supabase REST API 目标地址 (MDM 专用)
             target: 'https://htxfutvuywknwgkkjboq.supabase.co/rest/v1',
+            secure: false,
             ws: true,
           },
           '/api/auth': {
@@ -18,6 +19,7 @@ export default defineConfig(async () => {
             rewrite: (path) => path.replace(/^\/api\/auth/, ''),
             // Supabase Auth API 目标地址
             target: 'https://htxfutvuywknwgkkjboq.supabase.co/auth/v1',
+            secure: false,
             ws: true,
           },
           '/api': {

@@ -1,4 +1,5 @@
 import { requestClient } from '#/api/request';
+import { withRequestCache } from './_cache';
 
 import { getNumberingSegmentListApi } from './numbering';
 import { getThemeListApi } from './theme';
@@ -274,33 +275,35 @@ async function resolveGroupIds(data: ModelDefinition) {
 }
 
 export async function getModelDefinitionListApi(params: any = {}) {
-  const { page = 1, pageSize = 10, includeHistory = false, ...rest } = params;
-  const response = await requestClient.get<any>(
-    '/supabase-mdm/mdm_model_definitions',
-    {
-      params: {
-        ...rest,
-        ...(includeHistory ? {} : { status: 'neq.history' }),
-        select: '*',
-        order: rest.order ?? 'sort_no.asc,updated_at.desc,created_at.desc',
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
+  return withRequestCache('mdm_model_definitions:list', params, async () => {
+    const { page = 1, pageSize = 10, includeHistory = false, ...rest } = params;
+    const response = await requestClient.get<any>(
+      '/supabase-mdm/mdm_model_definitions',
+      {
+        params: {
+          ...rest,
+          ...(includeHistory ? {} : { status: 'neq.history' }),
+          select: '*',
+          order: rest.order ?? 'sort_no.asc,updated_at.desc,created_at.desc',
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+        },
+        headers: {
+          Prefer: 'count=exact',
+        },
+        responseReturn: 'raw',
       },
-      headers: {
-        Prefer: 'count=exact',
-      },
-      responseReturn: 'raw',
-    },
-  );
+    );
 
-  const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
-  const lookups = await resolveModelDefinitionLookups();
-  const items = rawItems.map((item: any) => mapModelDefinition(item, lookups));
+    const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
+    const lookups = await resolveModelDefinitionLookups();
+    const items = rawItems.map((item: any) => mapModelDefinition(item, lookups));
 
-  return {
-    items,
-    total: parseTotal(response),
-  };
+    return {
+      items,
+      total: parseTotal(response),
+    };
+  });
 }
 
 export async function getModelDefinitionOptionsApi(

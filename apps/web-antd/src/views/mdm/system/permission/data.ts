@@ -20,11 +20,11 @@ export function useColumns(): VxeGridProps<any>['columns'] {
 
 export function useSchema() {
   return [
-    { field: 'parent', label: '上级权限', component: 'TreeSelect' },
-    { field: 'name', label: '权限名称', component: 'Input', required: true },
-    { field: 'code', label: '权限标识', component: 'Input', required: true },
+    { fieldName: 'parent', label: '上级权限', component: 'TreeSelect' },
+    { fieldName: 'name', label: '权限名称', component: 'Input', required: true },
+    { fieldName: 'code', label: '权限标识', component: 'Input', required: true },
     {
-      field: 'type',
+      fieldName: 'type',
       label: '类型',
       component: 'Select',
       required: true,
@@ -36,7 +36,7 @@ export function useSchema() {
         ],
       },
     },
-    { field: 'path', label: '路由/路径', component: 'Input' },
-    { field: 'description', label: '描述', component: 'Textarea' },
+    { fieldName: 'path', label: '路由/路径', component: 'Input' },
+    { fieldName: 'description', label: '描述', component: 'Textarea' },
   ];
 }

@@ -1,19 +1,10 @@
 import type { VbenFormSchema } from '#/adapter/form';
 
-const ROLE_OPTIONS = [
-  { label: '系统管理员', value: '系统管理员' },
-  { label: '模型设计者', value: '模型设计者' },
-  { label: '数据审核员', value: '数据审核员' },
-  { label: '设备接入专家', value: '设备接入专家' },
-  { label: '安全审计员', value: '安全审计员' },
-];
-
 export function useColumns() {
   return [
     { type: 'seq', width: 50 },
     { field: 'username', title: '用户名', width: 140 },
     { field: 'nickname', title: '姓名', width: 120 },
-    { field: 'org', title: '所属组织', width: 150 },
     {
       field: 'roles',
       title: '角色',
@@ -38,13 +29,24 @@ export function useColumns() {
   ];
 }
 
-export function useSchema(): VbenFormSchema[] {
-  return [
+export function useSchema(
+  roleOptions: any[] = [],
+  isCreate = false,
+): VbenFormSchema[] {
+  const schema: VbenFormSchema[] = [
     {
       fieldName: 'username',
       label: '用户名',
       component: 'Input',
       rules: 'required',
+    },
+    {
+      fieldName: 'authEmail',
+      label: '登录邮箱',
+      component: 'Input',
+      componentProps: {
+        placeholder: '可选，未填写时可使用用户名中的邮箱',
+      },
     },
     {
       fieldName: 'nickname',
@@ -53,20 +55,15 @@ export function useSchema(): VbenFormSchema[] {
       rules: 'required',
     },
     {
-      fieldName: 'org',
-      label: '所属组织',
-      component: 'Input',
-      defaultValue: '',
-    },
-    {
-      fieldName: 'roles',
+      fieldName: 'roleIds',
       label: '角色',
       component: 'Select',
       defaultValue: [],
       componentProps: {
         mode: 'multiple',
-        options: ROLE_OPTIONS,
+        options: roleOptions,
         placeholder: '请选择角色',
+        style: { width: '100%' },
       },
     },
     {
@@ -82,4 +79,30 @@ export function useSchema(): VbenFormSchema[] {
       },
     },
   ];
+
+  if (isCreate) {
+    schema.splice(3, 0,
+      {
+        fieldName: 'password',
+        label: '登录密码',
+        component: 'VbenInputPassword',
+        rules: 'required',
+        componentProps: {
+          passwordStrength: true,
+          placeholder: '请输入登录密码',
+        },
+      },
+      {
+        fieldName: 'confirmPassword',
+        label: '确认密码',
+        component: 'VbenInputPassword',
+        rules: 'required',
+        componentProps: {
+          placeholder: '请再次输入登录密码',
+        },
+      },
+    );
+  }
+
+  return schema;
 }

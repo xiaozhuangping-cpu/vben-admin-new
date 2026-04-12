@@ -17,7 +17,7 @@ const MOCK_TASKS = [
     lastRun: '2024-03-27 16:00:00',
     sourceSystem: 'Xiaomi IoT Platform',
     status: 'running',
-    targetModel: '智能照明',
+    targetModel: '照明',
     taskName: '米家设备状态同步',
     type: 'API',
   },

@@ -221,15 +221,6 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'MdmSystemPermission',
-        path: 'permission',
-        component: () => import('#/views/mdm/system/permission/index.vue'),
-        meta: {
-          keepAlive: true,
-          title: '权限管理',
-        },
-      },
-      {
         name: 'MdmSystemUserGroup',
         path: 'user-group',
         component: () => import('#/views/mdm/system/user-group/index.vue'),

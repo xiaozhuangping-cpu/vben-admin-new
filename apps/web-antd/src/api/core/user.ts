@@ -1,10 +1,11 @@
-import { requestClient } from '#/api/request';
+import { getCurrentRbacContext } from './rbac-context';
 
 /**
  * 获取用户信息
  */
 export async function getUserInfoApi() {
-  const response = await requestClient.get<any>('/auth/user');
+  const context = await getCurrentRbacContext();
+  const response = context.authUser;
   const email = response?.email || response?.user_metadata?.email || '';
   const fullName =
     response?.user_metadata?.full_name ||
@@ -18,8 +19,10 @@ export async function getUserInfoApi() {
     username: email,
     realName: fullName,
     avatar: response.user_metadata?.avatar_url || '',
-    roles: ['super'], // 默认给予 super 权限
-    desc: 'Supabase User',
-    homePath: '/',
+    roles: context.roleCodes.length > 0 ? context.roleCodes : context.legacyRoleCodes,
+    roleNames: context.roleNames,
+    mdmUserId: context.mdmUserId,
+    desc: context.mdmUserId ? 'Supabase MDM User' : 'Supabase User',
+    homePath: context.homePath || '/',
   } as any;
 }

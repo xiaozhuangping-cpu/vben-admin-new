@@ -141,11 +141,11 @@ function refreshGrid() {
       <Space>
         <Select
           :options="[
-            { label: '智能控制器 (CONTROLLER)', value: 'ctrl' },
+            { label: '控制器 (CONTROLLER)', value: 'ctrl' },
             { label: '环境传感器 (SENSOR)', value: 'sensor' },
-            { label: '智能照明 (LIGHTING)', value: 'light' },
+            { label: '照明 (LIGHTING)', value: 'light' },
           ]"
-          placeholder="当前模型: 智能控制器"
+          placeholder="当前模型: 控制器"
           style="width: 240px"
         />
         <Button @click="handleGrouping"> 分组管理 </Button>
