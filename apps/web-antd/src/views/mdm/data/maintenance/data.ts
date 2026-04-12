@@ -99,9 +99,7 @@ export const buildDynamicColumns = (
       const dictOptions = field.dictCode
         ? (dictOptionsMap[field.dictCode] ?? [])
         : [];
-      let formatter:
-        | ((params: { cellValue?: string }) => string)
-        | undefined;
+      let formatter: ((params: { cellValue?: string }) => string) | undefined;
 
       if (fieldCode === 'status') {
         formatter = ({ cellValue }: { cellValue?: string }) => {
@@ -248,7 +246,10 @@ export const buildDynamicFormSchema = (
             listType: 'text',
             maxCount,
             multiple: isMultiple,
-            onHandleChange: (event: { file: UploadFile; fileList: UploadFile[] }) => {
+            onHandleChange: (event: {
+              file: UploadFile;
+              fileList: UploadFile[];
+            }) => {
               const uploadedUrl =
                 event.file?.response?.url || event.file?.url || '';
               if (uploadedUrl) {

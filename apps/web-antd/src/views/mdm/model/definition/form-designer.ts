@@ -224,13 +224,11 @@ function normalizeSummaryColumns(item: Partial<FormDesignerField>) {
   }
 
   return Array.isArray(item.summaryFieldCodes)
-    ? item.summaryFieldCodes
-        .filter(Boolean)
-        .map((fieldCode) => ({
-          fieldCode,
-          width: undefined,
-          wrap: false,
-        }))
+    ? item.summaryFieldCodes.filter(Boolean).map((fieldCode) => ({
+        fieldCode,
+        width: undefined,
+        wrap: false,
+      }))
     : [];
 }
 

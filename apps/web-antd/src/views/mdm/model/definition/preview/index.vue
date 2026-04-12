@@ -28,14 +28,8 @@ import { getDictItemOptionsApi } from '#/api/mdm/dict';
 import { getModelFieldListApi } from '#/api/mdm/model-definition';
 import { getModelRelationshipListApi } from '#/api/mdm/model-relationship';
 
-import {
-  type CompositeModelMeta,
-  type FormDesignerSummaryColumn,
-  getDisplayDraftStorageKey,
-  getDisplayStorageKey,
-  getSectionFields,
-  normalizeDesignerSchema,
-} from '../form-designer';
+import { getDisplayDraftStorageKey, getDisplayStorageKey, getSectionFields, normalizeDesignerSchema } from '../form-designer';
+import type { CompositeModelMeta, FormDesignerSummaryColumn } from '../form-designer';
 
 const route = useRoute();
 const router = useRouter();
@@ -278,7 +272,9 @@ async function loadCompositeSchemas() {
       ),
     ),
   ];
-  await Promise.all(compositeDictCodes.map((dictCode) => ensureDictOptions(dictCode)));
+  await Promise.all(
+    compositeDictCodes.map((dictCode) => ensureDictOptions(dictCode)),
+  );
 }
 
 function getCompositeSections(relatedDefinitionId?: string) {
@@ -313,7 +309,9 @@ function getCompositeFieldLabels(relatedDefinitionId?: string) {
 
 function getCompositeLeafFields(relatedDefinitionId?: string) {
   return getCompositeSections(relatedDefinitionId).flatMap((section: any) =>
-    getSectionFields(section).filter((item: any) => item.component !== 'CompositeModel'),
+    getSectionFields(section).filter(
+      (item: any) => item.component !== 'CompositeModel',
+    ),
   );
 }
 
@@ -325,9 +323,7 @@ function getCompositeTableSummaryFields(item: any) {
     : [];
   let summaryFieldCodes: string[] = [];
   if (summaryColumns.length > 0) {
-    summaryFieldCodes = summaryColumns.map(
-      (column: any) => column.fieldCode,
-    );
+    summaryFieldCodes = summaryColumns.map((column: any) => column.fieldCode);
   } else if (Array.isArray(item?.summaryFieldCodes)) {
     summaryFieldCodes = item.summaryFieldCodes;
   }
@@ -438,8 +434,7 @@ function getCompositeInitialValues(relatedDefinitionId?: string) {
 function openCompositeDrawer(item: any, editIndex?: number) {
   const relatedDefinitionId = String(item.relatedDefinitionId || '');
   compositeDrawerDefinitionId.value = relatedDefinitionId;
-  compositeDrawerEditIndex.value =
-    editIndex === undefined ? null : editIndex;
+  compositeDrawerEditIndex.value = editIndex === undefined ? null : editIndex;
   compositeDrawerTitle.value =
     editIndex === undefined ? `新增${item.label}` : `编辑${item.label}`;
   compositeDrawerValues.value =
@@ -565,7 +560,9 @@ onMounted(async () => {
                           "
                         >
                           {{ item.label }}
-                          <span v-if="item.required" class="ml-1 text-red-500">*</span>
+                          <span v-if="item.required" class="ml-1 text-red-500"
+                            >*</span
+                          >
                         </div>
                         <div class="space-y-2 text-left">
                           <div
@@ -573,7 +570,9 @@ onMounted(async () => {
                             class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
                           >
                             <template v-if="item.displayMode === 'table'">
-                              <div class="flex items-center justify-between gap-2">
+                              <div
+                                class="flex items-center justify-between gap-2"
+                              >
                                 <div>
                                   <div class="font-medium text-amber-900">
                                     {{ item.label }}
@@ -598,7 +597,9 @@ onMounted(async () => {
                               <Table
                                 class="mt-3"
                                 :columns="getCompositeTableColumns(item)"
-                                :data-source="getCompositeRows(item.relatedDefinitionId)"
+                                :data-source="
+                                  getCompositeRows(item.relatedDefinitionId)
+                                "
                                 :pagination="false"
                                 row-key="id"
                                 size="small"
@@ -607,12 +608,19 @@ onMounted(async () => {
                                   <template v-if="column.key === '__seq'">
                                     {{ Number(index) + 1 }}
                                   </template>
-                                  <template v-else-if="column.key === '__action'">
+                                  <template
+                                    v-else-if="column.key === '__action'"
+                                  >
                                     <Space size="small">
                                       <Button
                                         size="small"
                                         type="link"
-                                        @click="openCompositeDrawer(item, Number(index))"
+                                        @click="
+                                          openCompositeDrawer(
+                                            item,
+                                            Number(index),
+                                          )
+                                        "
                                       >
                                         编辑
                                       </Button>
@@ -646,7 +654,9 @@ onMounted(async () => {
                               </Table>
                             </template>
                             <template v-else>
-                              <div class="flex items-center justify-between gap-2">
+                              <div
+                                class="flex items-center justify-between gap-2"
+                              >
                                 <div class="font-medium text-amber-900">
                                   {{ item.label }}
                                 </div>
@@ -655,26 +665,29 @@ onMounted(async () => {
                                 </Tag>
                               </div>
                               <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
-                                <Tag color="blue">
-                                  已纳入子模型设计
-                                </Tag>
+                                <Tag>{{
+                                  getCompositeDisplayModeLabel(item.displayMode)
+                                }}</Tag>
+                                <Tag color="blue"> 已纳入子模型设计 </Tag>
                               </div>
                               <div
-                                v-if="getCompositeFieldLabels(item.relatedDefinitionId).length > 0"
+                                v-if="
+                                  getCompositeFieldLabels(
+                                    item.relatedDefinitionId,
+                                  ).length > 0
+                                "
                                 class="mt-3 flex flex-wrap gap-2"
                               >
                                 <Tag
-                                  v-for="label in getCompositeFieldLabels(item.relatedDefinitionId)"
+                                  v-for="label in getCompositeFieldLabels(
+                                    item.relatedDefinitionId,
+                                  )"
                                   :key="`${item.id}-${label}`"
                                 >
                                   {{ label }}
                                 </Tag>
                               </div>
-                              <div
-                                v-else
-                                class="mt-3 text-xs text-gray-500"
-                              >
+                              <div v-else class="mt-3 text-xs text-gray-500">
                                 当前组合模型尚未完成字段布局设计。
                               </div>
                             </template>
@@ -783,7 +796,9 @@ onMounted(async () => {
                         "
                       >
                         {{ item.label }}
-                        <span v-if="item.required" class="ml-1 text-red-500">*</span>
+                        <span v-if="item.required" class="ml-1 text-red-500"
+                          >*</span
+                        >
                       </div>
                       <div class="space-y-2 text-left">
                         <div
@@ -791,7 +806,9 @@ onMounted(async () => {
                           class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
                         >
                           <template v-if="item.displayMode === 'table'">
-                            <div class="flex items-center justify-between gap-2">
+                            <div
+                              class="flex items-center justify-between gap-2"
+                            >
                               <div>
                                 <div class="font-medium text-amber-900">
                                   {{ item.label }}
@@ -816,7 +833,9 @@ onMounted(async () => {
                             <Table
                               class="mt-3"
                               :columns="getCompositeTableColumns(item)"
-                              :data-source="getCompositeRows(item.relatedDefinitionId)"
+                              :data-source="
+                                getCompositeRows(item.relatedDefinitionId)
+                              "
                               :pagination="false"
                               row-key="id"
                               size="small"
@@ -830,7 +849,9 @@ onMounted(async () => {
                                     <Button
                                       size="small"
                                       type="link"
-                                      @click="openCompositeDrawer(item, Number(index))"
+                                      @click="
+                                        openCompositeDrawer(item, Number(index))
+                                      "
                                     >
                                       编辑
                                     </Button>
@@ -864,7 +885,9 @@ onMounted(async () => {
                             </Table>
                           </template>
                           <template v-else>
-                            <div class="flex items-center justify-between gap-2">
+                            <div
+                              class="flex items-center justify-between gap-2"
+                            >
                               <div class="font-medium text-amber-900">
                                 {{ item.label }}
                               </div>
@@ -873,24 +896,29 @@ onMounted(async () => {
                               </Tag>
                             </div>
                             <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                              <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
+                              <Tag>{{
+                                getCompositeDisplayModeLabel(item.displayMode)
+                              }}</Tag>
                               <Tag color="blue">已纳入子模型设计</Tag>
                             </div>
                             <div
-                              v-if="getCompositeFieldLabels(item.relatedDefinitionId).length > 0"
+                              v-if="
+                                getCompositeFieldLabels(
+                                  item.relatedDefinitionId,
+                                ).length > 0
+                              "
                               class="mt-3 flex flex-wrap gap-2"
                             >
                               <Tag
-                                v-for="label in getCompositeFieldLabels(item.relatedDefinitionId)"
+                                v-for="label in getCompositeFieldLabels(
+                                  item.relatedDefinitionId,
+                                )"
                                 :key="`${item.id}-${label}`"
                               >
                                 {{ label }}
                               </Tag>
                             </div>
-                            <div
-                              v-else
-                              class="mt-3 text-xs text-gray-500"
-                            >
+                            <div v-else class="mt-3 text-xs text-gray-500">
                               当前组合模型尚未完成字段布局设计。
                             </div>
                           </template>
@@ -975,7 +1003,11 @@ onMounted(async () => {
                 <div class="mb-4 text-base font-medium">
                   {{ section.title }}
                 </div>
-                <Tabs :active-key="section.defaultActiveTabId || section.tabs[0]?.id">
+                <Tabs
+                  :active-key="
+                    section.defaultActiveTabId || section.tabs[0]?.id
+                  "
+                >
                   <Tabs.TabPane
                     v-for="tab in section.tabs"
                     :key="tab.id"
@@ -1000,11 +1032,15 @@ onMounted(async () => {
                           <div
                             class="text-sm font-medium text-gray-700"
                             :class="
-                              item.labelLayout === 'horizontal' ? 'text-right' : ''
+                              item.labelLayout === 'horizontal'
+                                ? 'text-right'
+                                : ''
                             "
                           >
                             {{ item.label }}
-                            <span v-if="item.required" class="ml-1 text-red-500">*</span>
+                            <span v-if="item.required" class="ml-1 text-red-500"
+                              >*</span
+                            >
                           </div>
                           <div class="space-y-2 text-left">
                             <div
@@ -1012,7 +1048,9 @@ onMounted(async () => {
                               class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
                             >
                               <template v-if="item.displayMode === 'table'">
-                                <div class="flex items-center justify-between gap-2">
+                                <div
+                                  class="flex items-center justify-between gap-2"
+                                >
                                   <div>
                                     <div class="font-medium text-amber-900">
                                       {{ item.label }}
@@ -1037,21 +1075,32 @@ onMounted(async () => {
                                 <Table
                                   class="mt-3"
                                   :columns="getCompositeTableColumns(item)"
-                                  :data-source="getCompositeRows(item.relatedDefinitionId)"
+                                  :data-source="
+                                    getCompositeRows(item.relatedDefinitionId)
+                                  "
                                   :pagination="false"
                                   row-key="id"
                                   size="small"
                                 >
-                                  <template #bodyCell="{ column, record, index }">
+                                  <template
+                                    #bodyCell="{ column, record, index }"
+                                  >
                                     <template v-if="column.key === '__seq'">
                                       {{ Number(index) + 1 }}
                                     </template>
-                                    <template v-else-if="column.key === '__action'">
+                                    <template
+                                      v-else-if="column.key === '__action'"
+                                    >
                                       <Space size="small">
                                         <Button
                                           size="small"
                                           type="link"
-                                          @click="openCompositeDrawer(item, Number(index))"
+                                          @click="
+                                            openCompositeDrawer(
+                                              item,
+                                              Number(index),
+                                            )
+                                          "
                                         >
                                           编辑
                                         </Button>
@@ -1085,7 +1134,9 @@ onMounted(async () => {
                                 </Table>
                               </template>
                               <template v-else>
-                                <div class="flex items-center justify-between gap-2">
+                                <div
+                                  class="flex items-center justify-between gap-2"
+                                >
                                   <div class="font-medium text-amber-900">
                                     {{ item.label }}
                                   </div>
@@ -1094,24 +1145,31 @@ onMounted(async () => {
                                   </Tag>
                                 </div>
                                 <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                  <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
+                                  <Tag>{{
+                                    getCompositeDisplayModeLabel(
+                                      item.displayMode,
+                                    )
+                                  }}</Tag>
                                   <Tag color="blue">已纳入子模型设计</Tag>
                                 </div>
                                 <div
-                                  v-if="getCompositeFieldLabels(item.relatedDefinitionId).length > 0"
+                                  v-if="
+                                    getCompositeFieldLabels(
+                                      item.relatedDefinitionId,
+                                    ).length > 0
+                                  "
                                   class="mt-3 flex flex-wrap gap-2"
                                 >
                                   <Tag
-                                    v-for="label in getCompositeFieldLabels(item.relatedDefinitionId)"
+                                    v-for="label in getCompositeFieldLabels(
+                                      item.relatedDefinitionId,
+                                    )"
                                     :key="`${item.id}-${label}`"
                                   >
                                     {{ label }}
                                   </Tag>
                                 </div>
-                                <div
-                                  v-else
-                                  class="mt-3 text-xs text-gray-500"
-                                >
+                                <div v-else class="mt-3 text-xs text-gray-500">
                                   当前组合模型尚未完成字段布局设计。
                                 </div>
                               </template>
@@ -1173,7 +1231,9 @@ onMounted(async () => {
                               :multiple="isAttachmentMultiple(item)"
                               :disabled="item.readonly"
                             >
-                              <Button>{{ getAttachmentButtonText(item) }}</Button>
+                              <Button>{{
+                                getAttachmentButtonText(item)
+                              }}</Button>
                             </Upload>
                             <Input
                               v-else
@@ -1207,11 +1267,17 @@ onMounted(async () => {
         @close="closeCompositeDrawer"
       >
         <div class="space-y-6">
-          <template v-for="section in compositeDrawerSections" :key="section.id">
+          <template
+            v-for="section in compositeDrawerSections"
+            :key="section.id"
+          >
             <div class="rounded-xl border border-gray-200 bg-white p-4">
               <div class="mb-4 text-base font-medium">{{ section.title }}</div>
 
-              <div v-if="section.layout !== 'tabs'" class="grid grid-cols-24 gap-4">
+              <div
+                v-if="section.layout !== 'tabs'"
+                class="grid grid-cols-24 gap-4"
+              >
                 <div
                   v-for="item in section.items"
                   :key="item.id"
@@ -1225,33 +1291,43 @@ onMounted(async () => {
                     </div>
                     <Input
                       v-if="item.component === 'Input'"
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :placeholder="renderPlaceholder(item)"
                       :readonly="item.readonly"
                     />
                     <Input.TextArea
                       v-else-if="item.component === 'Textarea'"
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :placeholder="renderPlaceholder(item)"
                       :readonly="item.readonly"
                       :rows="4"
                     />
                     <InputNumber
                       v-else-if="item.component === 'InputNumber'"
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :disabled="item.readonly"
                       class="w-full"
                       :placeholder="renderPlaceholder(item)"
                     />
                     <DatePicker
                       v-else-if="item.component === 'DatePicker'"
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :disabled="item.readonly"
                       class="w-full"
                     />
                     <Select
                       v-else-if="item.component === 'Dict'"
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :disabled="item.readonly"
                       class="w-full"
                       :options="getDictOptionsByCode(item.dictCode)"
@@ -1259,7 +1335,9 @@ onMounted(async () => {
                     />
                     <Switch
                       v-else-if="item.component === 'Switch'"
-                      v-model:checked="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:checked="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :disabled="item.readonly"
                     />
                     <Upload
@@ -1272,7 +1350,9 @@ onMounted(async () => {
                     </Upload>
                     <Input
                       v-else
-                      v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                      v-model:value="
+                        compositeDrawerValues[item.fieldCode.toLowerCase()]
+                      "
                       :placeholder="renderPlaceholder(item)"
                       :readonly="item.readonly"
                     />
@@ -1280,7 +1360,10 @@ onMounted(async () => {
                 </div>
               </div>
 
-              <Tabs v-else :active-key="section.defaultActiveTabId || section.tabs[0]?.id">
+              <Tabs
+                v-else
+                :active-key="section.defaultActiveTabId || section.tabs[0]?.id"
+              >
                 <Tabs.TabPane
                   v-for="tab in section.tabs"
                   :key="tab.id"
@@ -1300,33 +1383,43 @@ onMounted(async () => {
                         </div>
                         <Input
                           v-if="item.component === 'Input'"
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :placeholder="renderPlaceholder(item)"
                           :readonly="item.readonly"
                         />
                         <Input.TextArea
                           v-else-if="item.component === 'Textarea'"
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :placeholder="renderPlaceholder(item)"
                           :readonly="item.readonly"
                           :rows="4"
                         />
                         <InputNumber
                           v-else-if="item.component === 'InputNumber'"
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :disabled="item.readonly"
                           class="w-full"
                           :placeholder="renderPlaceholder(item)"
                         />
                         <DatePicker
                           v-else-if="item.component === 'DatePicker'"
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :disabled="item.readonly"
                           class="w-full"
                         />
                         <Select
                           v-else-if="item.component === 'Dict'"
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :disabled="item.readonly"
                           class="w-full"
                           :options="getDictOptionsByCode(item.dictCode)"
@@ -1334,7 +1427,9 @@ onMounted(async () => {
                         />
                         <Switch
                           v-else-if="item.component === 'Switch'"
-                          v-model:checked="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:checked="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :disabled="item.readonly"
                         />
                         <Upload
@@ -1347,7 +1442,9 @@ onMounted(async () => {
                         </Upload>
                         <Input
                           v-else
-                          v-model:value="compositeDrawerValues[item.fieldCode.toLowerCase()]"
+                          v-model:value="
+                            compositeDrawerValues[item.fieldCode.toLowerCase()]
+                          "
                           :placeholder="renderPlaceholder(item)"
                           :readonly="item.readonly"
                         />
@@ -1361,7 +1458,9 @@ onMounted(async () => {
 
           <div class="flex justify-end gap-2 border-t border-gray-200 pt-4">
             <Button @click="closeCompositeDrawer">取消</Button>
-            <Button type="primary" @click="saveCompositeDrawer">保存明细</Button>
+            <Button type="primary" @click="saveCompositeDrawer"
+              >保存明细</Button
+            >
           </div>
         </div>
       </Drawer>

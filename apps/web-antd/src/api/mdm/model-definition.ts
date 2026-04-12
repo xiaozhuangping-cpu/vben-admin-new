@@ -474,9 +474,12 @@ export async function updateModelDefinitionApi(
   data: ModelDefinition,
 ) {
   const { auditGroupId, groupId } = await resolveGroupIds(data);
-  const isReadonlyStatus = ['history', 'invalid', 'published', 'revised'].includes(
-    data.status,
-  );
+  const isReadonlyStatus = [
+    'history',
+    'invalid',
+    'published',
+    'revised',
+  ].includes(data.status);
   const payload = isReadonlyStatus
     ? {
         audit_group_id: auditGroupId,
@@ -644,10 +647,9 @@ export async function getModelFieldListApi(definitionId: string) {
       dictCode,
       dictName: dictCode ? (dictMap.get(dictCode) ?? '') : '',
       isCodeField: item.is_code_field ?? false,
-      isMultiple: normalizeAttachmentMode(
-        item.attachment_mode,
-        item.is_multiple,
-      ) === 'multiple',
+      isMultiple:
+        normalizeAttachmentMode(item.attachment_mode, item.is_multiple) ===
+        'multiple',
       isPrimary: item.is_primary,
       isRequired: item.is_required,
       isUnique: item.is_unique,

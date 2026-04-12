@@ -53,9 +53,12 @@ const [Modal, modalApi] = useVbenModal({
     if (isOpen) {
       const data = modalApi.getData<any>();
       currentData.value = data;
-      const isReadonlyStatus = ['history', 'invalid', 'published', 'revised'].includes(
-        data?.status,
-      );
+      const isReadonlyStatus = [
+        'history',
+        'invalid',
+        'published',
+        'revised',
+      ].includes(data?.status);
       const isSortReadonlyStatus = ['history', 'revised'].includes(
         data?.status,
       );

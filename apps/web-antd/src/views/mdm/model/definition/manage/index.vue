@@ -277,7 +277,8 @@ const usedCompositeDefinitionIds = computed(
       designerSchema.value.sections.flatMap((section) =>
         getSectionFields(section)
           .filter(
-            (item) => item.component === 'CompositeModel' && item.relatedDefinitionId,
+            (item) =>
+              item.component === 'CompositeModel' && item.relatedDefinitionId,
           )
           .map((item) => String(item.relatedDefinitionId)),
       ),
@@ -328,8 +329,14 @@ const selectedSection = computed(() => {
   );
 });
 
-function resolveFieldInSchema(sectionId: string, fieldId: string, tabId?: string) {
-  const section = designerSchema.value.sections.find((item) => item.id === sectionId);
+function resolveFieldInSchema(
+  sectionId: string,
+  fieldId: string,
+  tabId?: string,
+) {
+  const section = designerSchema.value.sections.find(
+    (item) => item.id === sectionId,
+  );
   if (!section) {
     return null;
   }
@@ -838,7 +845,11 @@ function handleSectionBlockDrop(sectionId: string, index: number) {
   handleDrop(sectionId);
 }
 
-function handleSectionDragOver(event: DragEvent, sectionId: string, tabId?: string) {
+function handleSectionDragOver(
+  event: DragEvent,
+  sectionId: string,
+  tabId?: string,
+) {
   if (!dragPayload.value) {
     return;
   }
@@ -1481,9 +1492,13 @@ onMounted(async () => {
               版本 {{ currentDefinition?.versionNo || '-' }}
             </Tag>
             <Tag
-              :color="currentDefinition?.status === 'invalid' ? 'default' : 'success'"
+              :color="
+                currentDefinition?.status === 'invalid' ? 'default' : 'success'
+              "
             >
-              {{ currentDefinition?.status === 'invalid' ? '已禁用' : '已启用' }}
+              {{
+                currentDefinition?.status === 'invalid' ? '已禁用' : '已启用'
+              }}
             </Tag>
           </div>
 
@@ -1797,15 +1812,15 @@ onMounted(async () => {
                           </div>
                         </div>
                         <div class="flex items-center gap-2">
-                        <Button
-                          :disabled="!isEditable"
-                          danger
-                          size="small"
-                          type="text"
-                          @click.stop="removeSection(section.id)"
-                        >
-                          删除分区
-                        </Button>
+                          <Button
+                            :disabled="!isEditable"
+                            danger
+                            size="small"
+                            type="text"
+                            @click.stop="removeSection(section.id)"
+                          >
+                            删除分区
+                          </Button>
                         </div>
                       </div>
 
@@ -1813,7 +1828,13 @@ onMounted(async () => {
                         v-if="section.layout !== 'tabs'"
                         class="grid min-h-[120px] grid-cols-24 gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3"
                         @dragover="handleSectionDragOver($event, section.id)"
-                        @drop="handleDrop(section.id, undefined, section.items.length)"
+                        @drop="
+                          handleDrop(
+                            section.id,
+                            undefined,
+                            section.items.length,
+                          )
+                        "
                       >
                         <div
                           v-for="(item, fieldIndex) in section.items"
@@ -1893,14 +1914,17 @@ onMounted(async () => {
                               <span
                                 v-if="item.required"
                                 class="ml-1 text-red-500"
-                                >*</span>
+                                >*</span
+                              >
                             </div>
                             <div class="space-y-2 text-left">
                               <div
                                 v-if="item.component === 'CompositeModel'"
                                 class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
                               >
-                                <div class="flex items-center justify-between gap-2">
+                                <div
+                                  class="flex items-center justify-between gap-2"
+                                >
                                   <div class="font-medium text-amber-900">
                                     {{ item.label }}
                                   </div>
@@ -1909,7 +1933,11 @@ onMounted(async () => {
                                   </Tag>
                                 </div>
                                 <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                  <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
+                                  <Tag>{{
+                                    getCompositeDisplayModeLabel(
+                                      item.displayMode,
+                                    )
+                                  }}</Tag>
                                   <Tag color="blue">子模型设计单独维护</Tag>
                                 </div>
                               </div>
@@ -2021,14 +2049,19 @@ onMounted(async () => {
                         ></div>
                       </div>
 
-                      <div v-else class="rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3">
+                      <div
+                        v-else
+                        class="rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3"
+                      >
                         <Tabs
                           :active-key="
                             activeDesignerTabs[section.id] ||
                             section.defaultActiveTabId ||
                             section.tabs[0]?.id
                           "
-                          @change="(key) => handleTabsChange(section.id, String(key))"
+                          @change="
+                            (key) => handleTabsChange(section.id, String(key))
+                          "
                         >
                           <Tabs.TabPane
                             v-for="tab in section.tabs"
@@ -2038,14 +2071,14 @@ onMounted(async () => {
                             <div
                               class="grid min-h-[120px] grid-cols-24 gap-3 rounded-lg border border-dashed border-gray-300 bg-white/80 p-3"
                               @dragover="
-                                handleSectionDragOver($event, section.id, tab.id)
-                              "
-                              @drop="
-                                handleDrop(
+                                handleSectionDragOver(
+                                  $event,
                                   section.id,
                                   tab.id,
-                                  tab.items.length,
                                 )
+                              "
+                              @drop="
+                                handleDrop(section.id, tab.id, tab.items.length)
                               "
                             >
                               <div
@@ -2139,30 +2172,42 @@ onMounted(async () => {
                                     <span
                                       v-if="item.required"
                                       class="ml-1 text-red-500"
-                                    >*</span>
+                                      >*</span
+                                    >
                                   </div>
                                   <div class="space-y-2 text-left">
-                                  <div
-                                    v-if="item.component === 'CompositeModel'"
-                                    class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
-                                  >
-                                    <div class="flex items-center justify-between gap-2">
-                                      <div class="font-medium text-amber-900">
-                                        {{ item.label }}
-                                      </div>
+                                    <div
+                                      v-if="item.component === 'CompositeModel'"
+                                      class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
+                                    >
+                                      <div
+                                        class="flex items-center justify-between gap-2"
+                                      >
+                                        <div class="font-medium text-amber-900">
+                                          {{ item.label }}
+                                        </div>
                                         <Tag color="gold">
                                           {{ item.relationType || '组合模型' }}
                                         </Tag>
                                       </div>
-                                      <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                        <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
-                                        <Tag color="blue">子模型设计单独维护</Tag>
+                                      <div
+                                        class="mt-2 flex flex-wrap gap-2 text-xs"
+                                      >
+                                        <Tag>{{
+                                          getCompositeDisplayModeLabel(
+                                            item.displayMode,
+                                          )
+                                        }}</Tag>
+                                        <Tag color="blue"
+                                          >子模型设计单独维护</Tag
+                                        >
                                       </div>
                                     </div>
                                     <Input
                                       v-else-if="item.component === 'Input'"
                                       :placeholder="
-                                        item.placeholder || `请输入${item.label}`
+                                        item.placeholder ||
+                                        `请输入${item.label}`
                                       "
                                       :readonly="true"
                                       :value="item.defaultValue"
@@ -2170,18 +2215,22 @@ onMounted(async () => {
                                     <Input.TextArea
                                       v-else-if="item.component === 'Textarea'"
                                       :placeholder="
-                                        item.placeholder || `请输入${item.label}`
+                                        item.placeholder ||
+                                        `请输入${item.label}`
                                       "
                                       :readonly="true"
                                       :rows="4"
                                       :value="item.defaultValue"
                                     />
                                     <InputNumber
-                                      v-else-if="item.component === 'InputNumber'"
+                                      v-else-if="
+                                        item.component === 'InputNumber'
+                                      "
                                       :disabled="true"
                                       class="w-full"
                                       :placeholder="
-                                        item.placeholder || `请输入${item.label}`
+                                        item.placeholder ||
+                                        `请输入${item.label}`
                                       "
                                       :value="
                                         item.defaultValue
@@ -2190,20 +2239,26 @@ onMounted(async () => {
                                       "
                                     />
                                     <DatePicker
-                                      v-else-if="item.component === 'DatePicker'"
+                                      v-else-if="
+                                        item.component === 'DatePicker'
+                                      "
                                       :disabled="true"
                                       class="w-full"
                                       :placeholder="
-                                        item.placeholder || `请选择${item.label}`
+                                        item.placeholder ||
+                                        `请选择${item.label}`
                                       "
                                     />
                                     <Select
                                       v-else-if="item.component === 'Dict'"
                                       :disabled="true"
                                       class="w-full"
-                                      :options="getDictOptionsByCode(item.dictCode)"
+                                      :options="
+                                        getDictOptionsByCode(item.dictCode)
+                                      "
                                       :placeholder="
-                                        item.placeholder || `请选择${item.label}`
+                                        item.placeholder ||
+                                        `请选择${item.label}`
                                       "
                                       :value="item.defaultValue"
                                     />
@@ -2213,14 +2268,20 @@ onMounted(async () => {
                                       :disabled="true"
                                     />
                                     <Upload
-                                      v-else-if="item.component === 'Attachment'"
+                                      v-else-if="
+                                        item.component === 'Attachment'
+                                      "
                                       :max-count="
-                                        isAttachmentMultiple(item.attachmentMode)
+                                        isAttachmentMultiple(
+                                          item.attachmentMode,
+                                        )
                                           ? 9
                                           : 1
                                       "
                                       :multiple="
-                                        isAttachmentMultiple(item.attachmentMode)
+                                        isAttachmentMultiple(
+                                          item.attachmentMode,
+                                        )
                                       "
                                       :disabled="true"
                                     >
@@ -2237,7 +2298,8 @@ onMounted(async () => {
                                     <Input
                                       v-else
                                       :placeholder="
-                                        item.placeholder || `请输入${item.label}`
+                                        item.placeholder ||
+                                        `请输入${item.label}`
                                       "
                                       :readonly="true"
                                       :value="item.defaultValue"
@@ -2281,10 +2343,10 @@ onMounted(async () => {
                         description="暂无分区，请先新增分区或重新生成表单"
                       />
                     </div>
-              </div>
-            </Card>
+                  </div>
+                </Card>
 
-            <Card size="small" title="属性配置">
+                <Card size="small" title="属性配置">
                   <template v-if="selectedField">
                     <div class="space-y-4">
                       <div class="text-xs text-gray-500">
@@ -2303,11 +2365,7 @@ onMounted(async () => {
                         :options="FORM_COMPONENT_OPTIONS"
                         placeholder="组件类型"
                       />
-                      <Input
-                        v-else
-                        value="组合模型容器"
-                        disabled
-                      />
+                      <Input v-else value="组合模型容器" disabled />
                       <Input
                         :disabled="!isEditable"
                         v-model:value="selectedField.placeholder"
@@ -2317,7 +2375,8 @@ onMounted(async () => {
                         <div class="mb-2 text-sm font-medium">组合模型</div>
                         <Input
                           :value="
-                            selectedField.relatedModelName || selectedField.label
+                            selectedField.relatedModelName ||
+                            selectedField.label
                           "
                           disabled
                         />
@@ -2508,7 +2567,9 @@ onMounted(async () => {
                         </div>
                       </template>
                       <template v-else>
-                        <div class="space-y-3 rounded-lg border border-gray-200 p-3">
+                        <div
+                          class="space-y-3 rounded-lg border border-gray-200 p-3"
+                        >
                           <div class="flex items-center justify-between">
                             <span class="text-sm font-medium">TAB 页签</span>
                             <Button
@@ -2535,7 +2596,9 @@ onMounted(async () => {
                               danger
                               size="small"
                               type="text"
-                              @click="removeSectionTab(selectedSection.id, tab.id)"
+                              @click="
+                                removeSectionTab(selectedSection.id, tab.id)
+                              "
                             >
                               删除
                             </Button>
