@@ -6,6 +6,10 @@ import { computed } from 'vue';
 import { ProfilePasswordSetting, z } from '@vben/common-ui';
 
 import { message } from 'ant-design-vue';
+import { updatePasswordApi } from '#/api';
+import { ref } from 'vue';
+
+const loading = ref(false);
 
 const formSchema = computed((): VbenFormSchema[] => {
   return [
@@ -50,14 +54,46 @@ const formSchema = computed((): VbenFormSchema[] => {
   ];
 });
 
-function handleSubmit() {
-  message.success('密码修改成功');
+async function handleSubmit(values: any) {
+  try {
+    loading.value = true;
+    await new Promise((resolve) => setTimeout(resolve, 500)); // Make loading visible
+    await updatePasswordApi(values.newPassword);
+    message.success('密码修改成功');
+  } catch (err: any) {
+    message.error(err.message || '密码修改失败');
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 <template>
-  <ProfilePasswordSetting
-    class="w-1/3"
-    :form-schema="formSchema"
-    @submit="handleSubmit"
-  />
+  <div class="center-form-container p-6">
+    <ProfilePasswordSetting
+      class="w-full max-w-[500px]"
+      :form-schema="formSchema"
+      :submit-button-props="{ loading, type: 'primary' }"
+      submit-button-position="center"
+      :form-props="{
+        layout: 'vertical',
+      }"
+      @submit="handleSubmit"
+    />
+  </div>
 </template>
+
+<style>
+.center-form-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.center-form-container .ant-form-item:last-child .ant-form-item-control-input-content,
+.center-form-container .vben-form-actions,
+.center-form-container [class*="action"] {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+</style>

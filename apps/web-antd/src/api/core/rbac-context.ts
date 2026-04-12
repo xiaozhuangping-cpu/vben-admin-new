@@ -9,6 +9,11 @@ interface CurrentRbacContext {
   menuIds: string[];
   roleCodes: string[];
   roleNames: string[];
+  groupCodes: string[];
+  groupNames: string[];
+  nickname?: string;
+  lastLogin?: string;
+  createdAt?: string;
   homePath?: string;
 }
 
@@ -44,16 +49,17 @@ async function loadCurrentRbacContext(): Promise<CurrentRbacContext> {
   const usernameCandidates = buildUsernameCandidates(email, metadataUsername);
   let mdmUserId: null | string = null;
   let roleHomePath: null | string = null;
+  let matchedUser: any = null;
 
   for (const candidate of usernameCandidates) {
     const userResp = await requestClient.get<any[]>('/supabase-mdm/mdm_users', {
       params: {
         username: `eq.${candidate}`,
-        select: 'id,username,nickname,status',
+        select: 'id,username,nickname,status,last_login_at,created_at',
         limit: 1,
       },
     });
-    const matchedUser = userResp?.[0];
+    matchedUser = userResp?.[0];
     if (matchedUser?.id) {
       mdmUserId = matchedUser.id;
       break;
@@ -71,6 +77,8 @@ async function loadCurrentRbacContext(): Promise<CurrentRbacContext> {
       menuIds: [],
       roleCodes: [],
       roleNames: [],
+      groupCodes: [],
+      groupNames: [],
       homePath: finalHomePath,
     };
   }
@@ -110,6 +118,8 @@ async function loadCurrentRbacContext(): Promise<CurrentRbacContext> {
       menuIds: [],
       roleCodes,
       roleNames,
+      groupCodes: [],
+      groupNames: [],
       homePath: resolvedHomePath,
     };
   }
@@ -132,6 +142,20 @@ async function loadCurrentRbacContext(): Promise<CurrentRbacContext> {
     ),
   );
 
+  const userGroupResp = await requestClient.get<any[]>(
+    '/supabase-mdm/mdm_user_groups',
+    {
+      params: {
+        user_ids: `cs.{${mdmUserId}}`,
+        select: 'code,name',
+      },
+    },
+  );
+
+  const groupRows = Array.isArray(userGroupResp) ? userGroupResp : [];
+  const groupCodes = groupRows.map((item: any) => item.code);
+  const groupNames = groupRows.map((item: any) => item.name);
+
   return {
     authUser,
     isSuperAdmin,
@@ -140,6 +164,11 @@ async function loadCurrentRbacContext(): Promise<CurrentRbacContext> {
     menuIds,
     roleCodes,
     roleNames,
+    groupCodes,
+    groupNames,
+    nickname: matchedUser?.nickname || null,
+    lastLogin: matchedUser?.last_login_at || null,
+    createdAt: matchedUser?.created_at || null,
     homePath: resolvedHomePath,
   };
 }
