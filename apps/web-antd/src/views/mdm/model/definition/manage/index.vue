@@ -1,7 +1,11 @@
 ﻿<script lang="ts" setup>
 import type { TableColumnsType } from 'ant-design-vue';
 
-import type { FormDesignerSchema } from '../form-designer';
+import type {
+  CompositeModelMeta,
+  FormDesignerSchema,
+  FormDesignerSection,
+} from '../form-designer';
 
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -36,7 +40,7 @@ import {
   getModelDefinitionDetailApi,
   getModelFieldListApi,
   getModelVersionListApi,
-  updateModelDefinitionEnabledApi,
+  updateModelDefinitionStatusApi,
   updateModelFieldEnabledApi,
   upgradeModelDefinitionApi,
 } from '#/api/mdm/model-definition';
@@ -52,11 +56,15 @@ import { formatDateTime } from '#/utils/date';
 import RelationshipFormModal from '../../relationship/modules/form.vue';
 import {
   buildFieldMetaMap,
+  createCompositeWidget,
   createDefaultDesignerSchema,
   createFieldWidget,
+  createId,
+  createTab,
   getDefaultComponent,
   getDisplayDraftStorageKey,
   getDisplayStorageKey,
+  getSectionFields,
   normalizeDesignerSchema,
 } from '../form-designer';
 import FieldFormModal from '../modules/field-form.vue';
@@ -73,7 +81,7 @@ type TabKey = (typeof TAB_KEYS)[number];
 
 type DesignerSelection =
   | null
-  | { fieldId: string; sectionId: string; type: 'field' }
+  | { fieldId: string; sectionId: string; tabId?: string; type: 'field' }
   | { sectionId: string; type: 'section' };
 
 type DragPayload =
@@ -82,13 +90,21 @@ type DragPayload =
       fieldId: string;
       fromIndex: number;
       fromSectionId: string;
+      fromTabId?: string;
       mode: 'existing';
     }
-  | { fieldCode: string; mode: 'palette' };
+  | { fieldCode: string; mode: 'palette' }
+  | {
+      label: string;
+      mode: 'composite-palette';
+      relatedDefinitionId: string;
+      relationType: string;
+    };
 
 type DropTarget = {
   index: number;
   sectionId: string;
+  tabId?: string;
 };
 
 type SectionDropTarget = {
@@ -127,6 +143,8 @@ const authLoading = ref(false);
 
 const currentDefinition = ref<any>(null);
 const fields = ref<any[]>([]);
+const compositeFieldOptionsMap = ref<Record<string, DictOption[]>>({});
+const compositeFieldRequestMap = new Map<string, Promise<void>>();
 const dictDefinitions = ref<DictDefinitionOption[]>([]);
 const dictItemOptionsMap = ref<Record<string, DictOption[]>>({});
 const relationships = ref<any[]>([]);
@@ -142,6 +160,7 @@ const dropTarget = ref<DropTarget | null>(null);
 const sectionDragId = ref<null | string>(null);
 const sectionDropTarget = ref<null | SectionDropTarget>(null);
 const workspaceFullscreen = ref(false);
+const activeDesignerTabs = ref<Record<string, string>>({});
 
 const [ModelForm, modelFormApi] = useVbenModal({
   connectedComponent: ModelFormModal,
@@ -173,13 +192,10 @@ const canEditField = computed(
 const canDeleteField = computed(
   () => currentDefinition.value?.status === 'draft',
 );
-const canToggleModel = computed(
-  () => currentDefinition.value?.status === 'published',
-);
-
 const modelStatusMap: Record<string, { color: string; label: string }> = {
   draft: { color: 'warning', label: '草稿' },
   history: { color: 'default', label: '历史' },
+  invalid: { color: 'default', label: '失效' },
   published: { color: 'success', label: '已发布' },
   revised: { color: 'processing', label: '升级' },
 };
@@ -234,11 +250,36 @@ const FIELD_SPAN_OPTIONS = [
 
 const fieldMetaMap = computed(() => buildFieldMetaMap(fields.value));
 
+function getFieldAttachmentMode(field: any) {
+  if (field?.attachmentMode) {
+    return field.attachmentMode;
+  }
+  if (field?.dataType === 'attachment') {
+    return field?.isMultiple ? 'multiple' : 'single';
+  }
+  return '';
+}
+
 const usedFieldCodes = computed(
   () =>
     new Set(
       designerSchema.value.sections.flatMap((section) =>
-        section.items.map((item) => item.fieldCode),
+        getSectionFields(section)
+          .filter((item) => item.component !== 'CompositeModel')
+          .map((item) => item.fieldCode),
+      ),
+    ),
+);
+
+const usedCompositeDefinitionIds = computed(
+  () =>
+    new Set(
+      designerSchema.value.sections.flatMap((section) =>
+        getSectionFields(section)
+          .filter(
+            (item) => item.component === 'CompositeModel' && item.relatedDefinitionId,
+          )
+          .map((item) => String(item.relatedDefinitionId)),
       ),
     ),
 );
@@ -247,6 +288,7 @@ const paletteFields = computed(() =>
   fields.value
     .filter((item) => !item.isPrimary && item.code !== 'id')
     .map((item) => ({
+      attachmentMode: getFieldAttachmentMode(item),
       code: item.code,
       component: getDefaultComponent(item.dataType),
       dataType: item.dataType,
@@ -254,6 +296,26 @@ const paletteFields = computed(() =>
       used: usedFieldCodes.value.has(item.code),
     })),
 );
+
+const compositePaletteModels = computed<CompositeModelMeta[]>(() => {
+  if (currentDefinition.value?.modelType !== 'normal') {
+    return [];
+  }
+  return relationships.value
+    .filter(
+      (item: any) =>
+        item.sourceDefinitionId === modelId.value &&
+        item.targetDefinitionId &&
+        item.targetModelType === 'composite' &&
+        item.status !== 'obsolete' &&
+        ['1:1', '1:N'].includes(item.relationType),
+    )
+    .map((item: any) => ({
+      definitionId: String(item.targetDefinitionId),
+      label: item.targetModelName || item.targetModelCode || '组合模型',
+      relationType: item.relationType,
+    }));
+});
 
 const selectedSection = computed(() => {
   if (!designerSelection.value) {
@@ -266,14 +328,26 @@ const selectedSection = computed(() => {
   );
 });
 
+function resolveFieldInSchema(sectionId: string, fieldId: string, tabId?: string) {
+  const section = designerSchema.value.sections.find((item) => item.id === sectionId);
+  if (!section) {
+    return null;
+  }
+  if (section.layout === 'tabs') {
+    const tab = section.tabs.find((item) => item.id === tabId);
+    return tab?.items.find((item) => item.id === fieldId) ?? null;
+  }
+  return section.items.find((item) => item.id === fieldId) ?? null;
+}
+
 const selectedField = computed(() => {
   if (!designerSelection.value || designerSelection.value.type !== 'field') {
     return null;
   }
-  return (
-    selectedSection.value?.items.find(
-      (item) => item.id === designerSelection.value?.fieldId,
-    ) ?? null
+  return resolveFieldInSchema(
+    designerSelection.value.sectionId,
+    designerSelection.value.fieldId,
+    designerSelection.value.tabId,
   );
 });
 
@@ -385,6 +459,81 @@ function getDictOptionsByCode(dictCode?: string) {
   return dictItemOptionsMap.value[dictCode] ?? [];
 }
 
+async function ensureCompositeFieldOptions(relatedDefinitionId?: string) {
+  if (
+    !relatedDefinitionId ||
+    compositeFieldOptionsMap.value[relatedDefinitionId]
+  ) {
+    return;
+  }
+  const pendingRequest = compositeFieldRequestMap.get(relatedDefinitionId);
+  if (pendingRequest) {
+    await pendingRequest;
+    return;
+  }
+
+  const request = (async () => {
+    try {
+      const compositeFields = await getModelFieldListApi(relatedDefinitionId);
+      compositeFieldOptionsMap.value = {
+        ...compositeFieldOptionsMap.value,
+        [relatedDefinitionId]: compositeFields
+          .filter((item: any) => !item.isPrimary && item.code !== 'id')
+          .map((item: any) => ({
+            label: `${item.name} (${item.code})`,
+            value: item.code,
+          })),
+      };
+    } catch {
+      compositeFieldOptionsMap.value = {
+        ...compositeFieldOptionsMap.value,
+        [relatedDefinitionId]: [],
+      };
+    } finally {
+      compositeFieldRequestMap.delete(relatedDefinitionId);
+    }
+  })();
+
+  compositeFieldRequestMap.set(relatedDefinitionId, request);
+  await request;
+}
+
+function handleCompositeSummaryDropdownVisibleChange(
+  open: boolean,
+  relatedDefinitionId?: string,
+) {
+  if (!open) {
+    return;
+  }
+  void ensureCompositeFieldOptions(relatedDefinitionId);
+}
+
+function getAttachmentModeLabel(attachmentMode?: string) {
+  return attachmentMode === 'multiple' ? '多附件' : '单附件';
+}
+
+function getCompositeDisplayModeLabel(displayMode?: string) {
+  switch (displayMode) {
+    case 'tab': {
+      return '页签';
+    }
+    case 'table': {
+      return '明细表';
+    }
+    default: {
+      return '面板';
+    }
+  }
+}
+
+function isAttachmentMultiple(attachmentMode?: string) {
+  return attachmentMode === 'multiple';
+}
+
+function getCompositeFieldOptions(relatedDefinitionId?: string) {
+  return compositeFieldOptionsMap.value[relatedDefinitionId || ''] || [];
+}
+
 function normalizeTab(tab: unknown): TabKey {
   return TAB_KEYS.includes(tab as TabKey) ? (tab as TabKey) : 'fields';
 }
@@ -394,10 +543,26 @@ function loadDesignerSchema() {
     getDisplayStorageKey(modelId.value),
     null,
   );
-  designerSchema.value = normalizeDesignerSchema(fields.value, stored);
+  designerSchema.value = normalizeDesignerSchema(
+    fields.value,
+    stored,
+    compositePaletteModels.value,
+  );
+  activeDesignerTabs.value = Object.fromEntries(
+    designerSchema.value.sections
+      .filter((section) => section.layout === 'tabs')
+      .map((section) => [
+        section.id,
+        section.defaultActiveTabId || section.tabs[0]?.id || '',
+      ]),
+  );
   if (!designerSelection.value && designerSchema.value.sections.length > 0) {
+    const firstSection = designerSchema.value.sections[0];
+    if (!firstSection) {
+      return;
+    }
     designerSelection.value = {
-      sectionId: designerSchema.value.sections[0].id,
+      sectionId: firstSection.id,
       type: 'section',
     };
   }
@@ -407,24 +572,70 @@ function selectSection(sectionId: string) {
   designerSelection.value = { sectionId, type: 'section' };
 }
 
-function selectField(sectionId: string, fieldId: string) {
-  designerSelection.value = { fieldId, sectionId, type: 'field' };
+function selectField(sectionId: string, fieldId: string, tabId?: string) {
+  designerSelection.value = { fieldId, sectionId, tabId, type: 'field' };
 }
 
-function addSection() {
+function selectTabField(sectionId: string, tabId: string, fieldId: string) {
+  designerSelection.value = { fieldId, sectionId, tabId, type: 'field' };
+}
+
+function getSectionById(sectionId: string) {
+  return designerSchema.value.sections.find((item) => item.id === sectionId);
+}
+
+function getTabItems(sectionId: string, tabId?: string) {
+  const section = getSectionById(sectionId);
+  if (!section) {
+    return null;
+  }
+  if (section.layout === 'tabs') {
+    const targetTabId =
+      tabId || activeDesignerTabs.value[sectionId] || section.tabs[0]?.id;
+    const tab = section.tabs.find((item) => item.id === targetTabId);
+    return tab?.items ?? null;
+  }
+  return section.items;
+}
+
+function updateActiveDesignerTab(sectionId: string, tabId: string) {
+  activeDesignerTabs.value = {
+    ...activeDesignerTabs.value,
+    [sectionId]: tabId,
+  };
+}
+
+function addSection(layout: 'panel' | 'tabs' = 'panel') {
   if (!isEditable.value) {
     message.warning('当前状态不可编辑表单设计，请先发起升级。');
     return;
   }
-  const nextSection: FormDesignerSection = {
-    code: `section_${designerSchema.value.sections.length + 1}`,
-    collapsible: false,
-    defaultExpanded: true,
-    id: createId('section'),
-    items: [],
-    span: 24,
-    title: `新分区${designerSchema.value.sections.length + 1}`,
-  };
+  const sectionIndex = designerSchema.value.sections.length + 1;
+  const nextSection: FormDesignerSection =
+    layout === 'tabs'
+      ? {
+          code: `tabs_${sectionIndex}`,
+          defaultActiveTabId: '',
+          id: createId('section'),
+          layout: 'tabs',
+          span: 24,
+          tabs: [createTab(1), createTab(2)],
+          title: `页签分区${sectionIndex}`,
+        }
+      : {
+          code: `section_${sectionIndex}`,
+          collapsible: false,
+          defaultExpanded: true,
+          id: createId('section'),
+          items: [],
+          layout: 'panel',
+          span: 24,
+          title: `新分区${sectionIndex}`,
+        };
+  if (nextSection.layout === 'tabs') {
+    nextSection.defaultActiveTabId = nextSection.tabs[0]?.id;
+    updateActiveDesignerTab(nextSection.id, nextSection.tabs[0]?.id || '');
+  }
   designerSchema.value.sections.push(nextSection);
   selectSection(nextSection.id);
 }
@@ -455,7 +666,7 @@ function removeSection(sectionId: string) {
   if (!section) {
     return;
   }
-  if (section.items.length > 0) {
+  if (getSectionFields(section).length > 0) {
     message.warning('请先移出该分区内字段后再删除分区');
     return;
   }
@@ -470,7 +681,7 @@ function removeSection(sectionId: string) {
     : null;
 }
 
-function removeField(sectionId: string, fieldId: string) {
+function removeField(sectionId: string, fieldId: string, tabId?: string) {
   if (!isEditable.value) {
     message.warning('当前状态不可编辑表单设计，请先发起升级。');
     return;
@@ -481,32 +692,72 @@ function removeField(sectionId: string, fieldId: string) {
   if (!section) {
     return;
   }
-  section.items = section.items.filter((item) => item.id !== fieldId);
+  if (section.layout === 'tabs') {
+    const tab = section.tabs.find((item) => item.id === tabId);
+    if (!tab) {
+      return;
+    }
+    tab.items = tab.items.filter((item) => item.id !== fieldId);
+  } else {
+    section.items = section.items.filter((item) => item.id !== fieldId);
+  }
   designerSelection.value = { sectionId, type: 'section' };
 }
 
-function handlePaletteDragStart(fieldCode: string) {
+function activateDrag(event: DragEvent) {
+  const dataTransfer = event.dataTransfer;
+  if (!dataTransfer) {
+    return;
+  }
+  dataTransfer.effectAllowed = 'move';
+  dataTransfer.dropEffect = 'move';
+  dataTransfer.setData('text/plain', 'mdm-form-designer');
+}
+
+function handlePaletteDragStart(event: DragEvent, fieldCode: string) {
   if (!isEditable.value) {
     return;
   }
+  activateDrag(event);
   dragPayload.value = { fieldCode, mode: 'palette' };
   dropTarget.value = null;
 }
 
-function handleFieldDragStart(
-  sectionId: string,
-  fieldId: string,
-  fieldCode: string,
-  fromIndex: number,
+function handleCompositePaletteDragStart(
+  event: DragEvent,
+  model: CompositeModelMeta,
 ) {
   if (!isEditable.value) {
     return;
   }
+  activateDrag(event);
+  dragPayload.value = {
+    label: model.label,
+    mode: 'composite-palette',
+    relatedDefinitionId: model.definitionId,
+    relationType: model.relationType,
+  };
+  dropTarget.value = null;
+}
+
+function handleFieldDragStart(
+  event: DragEvent,
+  sectionId: string,
+  fieldId: string,
+  fieldCode: string,
+  fromIndex: number,
+  fromTabId?: string,
+) {
+  if (!isEditable.value) {
+    return;
+  }
+  activateDrag(event);
   dragPayload.value = {
     fieldCode,
     fieldId,
     fromIndex,
     fromSectionId: sectionId,
+    fromTabId,
     mode: 'existing',
   };
   dropTarget.value = null;
@@ -523,78 +774,84 @@ function clearDragState() {
   sectionDropTarget.value = null;
 }
 
-function setDropTarget(sectionId: string, index: number) {
-  dropTarget.value = { index, sectionId };
+function setDropTarget(sectionId: string, index: number, tabId?: string) {
+  dropTarget.value = { index, sectionId, tabId };
 }
 
 function setSectionDropTarget(index: number) {
   sectionDropTarget.value = { index };
 }
 
-function handleSectionBlockDragStart(sectionId: string) {
-  if (!isEditable.value) {
+function handleSectionBlockDragOver(
+  event: DragEvent,
+  sectionId: string,
+  index: number,
+) {
+  if (sectionDragId.value) {
+    allowDrop(event);
+    const currentTarget = event.currentTarget as HTMLElement | null;
+    if (!currentTarget) {
+      setSectionDropTarget(index);
+      return;
+    }
+    const rect = currentTarget.getBoundingClientRect();
+    const before = event.clientY < rect.top + rect.height / 2;
+    setSectionDropTarget(before ? index : index + 1);
     return;
   }
-  sectionDragId.value = sectionId;
-  dragPayload.value = null;
-  dropTarget.value = null;
-  sectionDropTarget.value = null;
-}
-
-function handleSectionBlockDragOver(event: DragEvent, index: number) {
-  if (!sectionDragId.value) {
-    return;
-  }
-  allowDrop(event);
-  const currentTarget = event.currentTarget as HTMLElement | null;
-  if (!currentTarget) {
-    setSectionDropTarget(index);
-    return;
-  }
-  const rect = currentTarget.getBoundingClientRect();
-  const before = event.clientY < rect.top + rect.height / 2;
-  setSectionDropTarget(before ? index : index + 1);
-}
-
-function handleSectionBlockDrop(index: number) {
-  if (!isEditable.value || !sectionDragId.value) {
-    return;
-  }
-  const sourceIndex = designerSchema.value.sections.findIndex(
-    (item) => item.id === sectionDragId.value,
-  );
-  if (sourceIndex === -1) {
-    clearDragState();
-    return;
-  }
-  const targetIndex = sectionDropTarget.value?.index ?? index;
-  const [movedSection] = designerSchema.value.sections.splice(sourceIndex, 1);
-  if (!movedSection) {
-    clearDragState();
-    return;
-  }
-  const nextIndex =
-    sourceIndex < targetIndex ? Math.max(targetIndex - 1, 0) : targetIndex;
-  designerSchema.value.sections.splice(nextIndex, 0, movedSection);
-  selectSection(movedSection.id);
-  clearDragState();
-}
-
-function handleSectionDragOver(event: DragEvent, sectionId: string) {
   if (!dragPayload.value) {
     return;
   }
   allowDrop(event);
-  const section = designerSchema.value.sections.find(
-    (item) => item.id === sectionId,
-  );
-  setDropTarget(sectionId, section?.items.length ?? 0);
+  const items = getTabItems(sectionId);
+  setDropTarget(sectionId, items?.length ?? 0);
+}
+
+function handleSectionBlockDrop(sectionId: string, index: number) {
+  if (!isEditable.value) {
+    return;
+  }
+  if (sectionDragId.value) {
+    const sourceIndex = designerSchema.value.sections.findIndex(
+      (item) => item.id === sectionDragId.value,
+    );
+    if (sourceIndex === -1) {
+      clearDragState();
+      return;
+    }
+    const targetIndex = sectionDropTarget.value?.index ?? index;
+    const [movedSection] = designerSchema.value.sections.splice(sourceIndex, 1);
+    if (!movedSection) {
+      clearDragState();
+      return;
+    }
+    const nextIndex =
+      sourceIndex < targetIndex ? Math.max(targetIndex - 1, 0) : targetIndex;
+    designerSchema.value.sections.splice(nextIndex, 0, movedSection);
+    selectSection(movedSection.id);
+    clearDragState();
+    return;
+  }
+  if (!dragPayload.value) {
+    return;
+  }
+  handleDrop(sectionId);
+}
+
+function handleSectionDragOver(event: DragEvent, sectionId: string, tabId?: string) {
+  if (!dragPayload.value) {
+    return;
+  }
+  allowDrop(event);
+  const items = getTabItems(sectionId, tabId);
+  setDropTarget(sectionId, items?.length ?? 0, tabId);
 }
 
 function handleFieldDragOver(
   event: DragEvent,
   sectionId: string,
   index: number,
+  tabId?: string,
 ) {
   if (!dragPayload.value) {
     return;
@@ -602,23 +859,28 @@ function handleFieldDragOver(
   allowDrop(event);
   const currentTarget = event.currentTarget as HTMLElement | null;
   if (!currentTarget) {
-    setDropTarget(sectionId, index);
+    setDropTarget(sectionId, index, tabId);
     return;
   }
   const rect = currentTarget.getBoundingClientRect();
   const before = event.clientY < rect.top + rect.height / 2;
-  setDropTarget(sectionId, before ? index : index + 1);
+  setDropTarget(sectionId, before ? index : index + 1, tabId);
 }
 
-function handleDrop(sectionId: string, fallbackIndex?: number) {
+function handleDrop(sectionId: string, tabId?: string, fallbackIndex?: number) {
   const targetIndex =
-    dropTarget.value?.sectionId === sectionId
+    dropTarget.value?.sectionId === sectionId &&
+    dropTarget.value?.tabId === tabId
       ? dropTarget.value.index
       : fallbackIndex;
-  insertFieldToSection(sectionId, targetIndex);
+  insertFieldToSection(sectionId, targetIndex, tabId);
 }
 
-function insertFieldToSection(sectionId: string, targetIndex?: number) {
+function insertFieldToSection(
+  sectionId: string,
+  targetIndex?: number,
+  tabId?: string,
+) {
   if (!isEditable.value) {
     return;
   }
@@ -626,10 +888,13 @@ function insertFieldToSection(sectionId: string, targetIndex?: number) {
   if (!payload) {
     return;
   }
-  const section = designerSchema.value.sections.find(
-    (item) => item.id === sectionId,
-  );
+  const section = getSectionById(sectionId);
   if (!section) {
+    return;
+  }
+  const targetItems = getTabItems(sectionId, tabId);
+  if (!targetItems) {
+    clearDragState();
     return;
   }
 
@@ -644,31 +909,98 @@ function insertFieldToSection(sectionId: string, targetIndex?: number) {
       clearDragState();
       return;
     }
-    section.items.splice(targetIndex ?? section.items.length, 0, newField);
-    selectField(sectionId, newField.id);
-  } else {
-    const sourceSection = designerSchema.value.sections.find(
-      (item) => item.id === payload.fromSectionId,
-    );
-    if (!sourceSection) {
+    targetItems.splice(targetIndex ?? targetItems.length, 0, newField);
+    if (tabId) {
+      selectTabField(sectionId, tabId, newField.id);
+    } else {
+      selectField(sectionId, newField.id);
+    }
+  } else if (payload.mode === 'composite-palette') {
+    if (usedCompositeDefinitionIds.value.has(payload.relatedDefinitionId)) {
+      message.warning('同一个组合模型在当前表单中只能放置一次');
+      clearDragState();
       return;
     }
-    const [movedField] = sourceSection.items.splice(payload.fromIndex, 1);
+    const compositeWidget = createCompositeWidget({
+      definitionId: payload.relatedDefinitionId,
+      label: payload.label,
+      relationType: payload.relationType,
+    });
+    targetItems.splice(targetIndex ?? targetItems.length, 0, compositeWidget);
+    if (tabId) {
+      selectTabField(sectionId, tabId, compositeWidget.id);
+    } else {
+      selectField(sectionId, compositeWidget.id);
+    }
+  } else {
+    const sourceItems = getTabItems(payload.fromSectionId, payload.fromTabId);
+    if (!sourceItems) {
+      return;
+    }
+    const [movedField] = sourceItems.splice(payload.fromIndex, 1);
     if (!movedField) {
       clearDragState();
       return;
     }
+    const sameContainer =
+      payload.fromSectionId === sectionId && payload.fromTabId === tabId;
     const nextIndex =
-      sourceSection.id === sectionId &&
+      sameContainer &&
       targetIndex !== undefined &&
       payload.fromIndex < targetIndex
         ? targetIndex - 1
-        : (targetIndex ?? section.items.length);
-    section.items.splice(nextIndex, 0, movedField);
-    selectField(sectionId, movedField.id);
+        : (targetIndex ?? targetItems.length);
+    targetItems.splice(nextIndex, 0, movedField);
+    if (tabId) {
+      selectTabField(sectionId, tabId, movedField.id);
+    } else {
+      selectField(sectionId, movedField.id);
+    }
   }
 
   clearDragState();
+}
+
+function handleTabsChange(sectionId: string, activeKey: string) {
+  const section = getSectionById(sectionId);
+  if (section?.layout === 'tabs') {
+    section.defaultActiveTabId = activeKey;
+  }
+  updateActiveDesignerTab(sectionId, activeKey);
+}
+
+function addSectionTab(sectionId: string) {
+  const section = getSectionById(sectionId);
+  if (!section || section.layout !== 'tabs') {
+    return;
+  }
+  const nextTab = createTab(section.tabs.length + 1);
+  section.tabs.push(nextTab);
+  section.defaultActiveTabId ||= nextTab.id;
+  updateActiveDesignerTab(sectionId, nextTab.id);
+}
+
+function removeSectionTab(sectionId: string, tabId: string) {
+  const section = getSectionById(sectionId);
+  if (!section || section.layout !== 'tabs') {
+    return;
+  }
+  const tab = section.tabs.find((item) => item.id === tabId);
+  if (!tab) {
+    return;
+  }
+  if (tab.items.length > 0) {
+    message.warning('请先移出该页签内字段后再删除页签');
+    return;
+  }
+  if (section.tabs.length <= 1) {
+    message.warning('TAB 分区至少保留一个页签');
+    return;
+  }
+  section.tabs = section.tabs.filter((item) => item.id !== tabId);
+  const nextActiveTabId = section.tabs[0]?.id || '';
+  section.defaultActiveTabId = nextActiveTabId;
+  updateActiveDesignerTab(sectionId, nextActiveTabId);
 }
 
 async function loadDefinition() {
@@ -690,8 +1022,6 @@ async function loadFields() {
   fieldLoading.value = true;
   try {
     fields.value = await getModelFieldListApi(modelId.value);
-    loadDesignerSchema();
-    await preloadSchemaDictOptions();
   } finally {
     fieldLoading.value = false;
   }
@@ -771,7 +1101,7 @@ async function preloadSchemaDictOptions() {
   const dictCodes = [
     ...new Set(
       designerSchema.value.sections.flatMap((section) =>
-        section.items
+        getSectionFields(section)
           .filter((item) => item.component === 'Dict' && item.dictCode)
           .map((item) => item.dictCode as string),
       ),
@@ -789,6 +1119,12 @@ async function initializePage() {
     loadAuthConfig(),
     loadDictDefinitions(),
   ]);
+  await refreshDesignerSchema();
+}
+
+async function refreshDesignerSchema() {
+  loadDesignerSchema();
+  await preloadSchemaDictOptions();
 }
 
 function saveDisplayConfig() {
@@ -798,7 +1134,11 @@ function saveDisplayConfig() {
   }
   setSafeStorage(
     getDisplayStorageKey(modelId.value),
-    normalizeDesignerSchema(fields.value, designerSchema.value),
+    normalizeDesignerSchema(
+      fields.value,
+      designerSchema.value,
+      compositePaletteModels.value,
+    ),
   );
   message.success('表单设计已保存');
 }
@@ -807,6 +1147,17 @@ function handleOpenPreview() {
   router.push({
     name: 'MdmModelDefinitionPreview',
     params: { id: modelId.value },
+  });
+}
+
+function openCompositeModelDesigner(relatedDefinitionId?: string) {
+  if (!relatedDefinitionId) {
+    return;
+  }
+  router.push({
+    name: 'MdmModelDefinitionManage',
+    params: { id: relatedDefinitionId },
+    query: { tab: 'display' },
   });
 }
 
@@ -838,7 +1189,10 @@ async function handleToggleModelEnabled(enabled: boolean) {
     return;
   }
   try {
-    await updateModelDefinitionEnabledApi(currentDefinition.value.id, enabled);
+    await updateModelDefinitionStatusApi(
+      currentDefinition.value.id,
+      enabled ? 'published' : 'invalid',
+    );
     message.success(enabled ? '模型已启用' : '模型已禁用');
     await loadDefinition();
   } catch {
@@ -879,6 +1233,7 @@ function handleCreateField() {
       definitionStatus: currentDefinition.value.status,
       onSuccess: async () => {
         await loadFields();
+        await refreshDesignerSchema();
       },
     })
     .open();
@@ -900,6 +1255,7 @@ function handleEditField(row: any) {
       definitionStatus: currentDefinition.value.status,
       onSuccess: async () => {
         await loadFields();
+        await refreshDesignerSchema();
       },
     })
     .open();
@@ -920,6 +1276,7 @@ function handleDeleteField(row: any) {
         await deleteModelFieldApi(row.id);
         message.success(`已删除字段: ${row.name}`);
         await loadFields();
+        await refreshDesignerSchema();
       } catch {
         message.error('删除字段失败');
       }
@@ -941,6 +1298,7 @@ async function handleToggleField(row: any, status: boolean) {
     await updateModelFieldEnabledApi(row.id, status);
     message.success(status ? '字段已启用' : '字段已禁用');
     await loadFields();
+    await refreshDesignerSchema();
   } catch {
     message.error(status ? '启用失败' : '禁用失败');
   }
@@ -957,6 +1315,7 @@ function handleCreateRelationship() {
       sort: 10,
       onSuccess: async () => {
         await loadRelationships();
+        await refreshDesignerSchema();
       },
     })
     .open();
@@ -968,6 +1327,7 @@ function handleEditRelationship(row: any) {
       ...row,
       onSuccess: async () => {
         await loadRelationships();
+        await refreshDesignerSchema();
       },
     })
     .open();
@@ -980,6 +1340,7 @@ function handleDeleteRelationship(row: any) {
         await deleteModelRelationshipApi(row.id);
         message.success('关系已删除');
         await loadRelationships();
+        await refreshDesignerSchema();
       } catch {
         message.error('删除失败');
       }
@@ -993,6 +1354,7 @@ async function handlePublishRelationship(row: any) {
     await publishModelRelationshipApi(row.id);
     message.success('关系已发布');
     await loadRelationships();
+    await refreshDesignerSchema();
   } catch {
     message.error('发布失败');
   }
@@ -1003,6 +1365,7 @@ async function handleObsoleteRelationship(row: any) {
     await obsoleteModelRelationshipApi(row.id);
     message.success('关系已作废');
     await loadRelationships();
+    await refreshDesignerSchema();
   } catch {
     message.error('作废失败');
   }
@@ -1020,7 +1383,11 @@ watch(
     }
     setSafeSessionStorage(
       getDisplayDraftStorageKey(modelId.value),
-      normalizeDesignerSchema(fields.value, value),
+      normalizeDesignerSchema(
+        fields.value,
+        value,
+        compositePaletteModels.value,
+      ),
     );
   },
   { deep: true },
@@ -1037,6 +1404,9 @@ watch(
     }
     if (field.component === 'Dict') {
       await ensureDictOptions(field.dictCode);
+    }
+    if (field.component === 'CompositeModel') {
+      await ensureCompositeFieldOptions(field.relatedDefinitionId);
     }
   },
   { deep: true },
@@ -1066,13 +1436,13 @@ onMounted(async () => {
           升级
         </Button>
         <Button
-          v-if="canToggleModel && !currentDefinition?.enabled"
+          v-if="currentDefinition?.status === 'invalid'"
           @click="handleToggleModelEnabled(true)"
         >
           启用
         </Button>
         <Button
-          v-if="canToggleModel && currentDefinition?.enabled"
+          v-if="currentDefinition?.status === 'published'"
           @click="handleToggleModelEnabled(false)"
         >
           禁用
@@ -1110,8 +1480,10 @@ onMounted(async () => {
             <Tag color="blue">
               版本 {{ currentDefinition?.versionNo || '-' }}
             </Tag>
-            <Tag :color="currentDefinition?.enabled ? 'success' : 'default'">
-              {{ currentDefinition?.enabled ? '已启用' : '已禁用' }}
+            <Tag
+              :color="currentDefinition?.status === 'invalid' ? 'default' : 'success'"
+            >
+              {{ currentDefinition?.status === 'invalid' ? '已禁用' : '已启用' }}
             </Tag>
           </div>
 
@@ -1285,8 +1657,11 @@ onMounted(async () => {
                   >
                     重新生成
                   </Button>
-                  <Button :disabled="!isEditable" @click="addSection">
+                  <Button :disabled="!isEditable" @click="addSection()">
                     新增分区
+                  </Button>
+                  <Button :disabled="!isEditable" @click="addSection('tabs')">
+                    新增TAB分区
                   </Button>
                   <Button type="primary" @click="saveDisplayConfig">
                     保存设计
@@ -1297,12 +1672,13 @@ onMounted(async () => {
               <div
                 class="grid min-h-[640px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)_320px]"
               >
-                <Card size="small" title="字段素材">
-                  <div class="space-y-3">
+                <Card size="small" title="设计素材">
+                  <div class="space-y-4">
                     <div class="text-xs text-gray-500">
-                      拖拽左侧字段到中间画布，同一字段只能在表单中放置一次。
+                      拖拽左侧素材到中间画布。字段和组合模型在当前表单中都只能放置一次。
                     </div>
                     <div class="space-y-2">
+                      <div class="text-sm font-medium">字段素材</div>
                       <div
                         v-for="field in paletteFields"
                         :key="field.code"
@@ -1314,7 +1690,7 @@ onMounted(async () => {
                         ]"
                         :draggable="isEditable && !field.used"
                         @dragend="clearDragState"
-                        @dragstart="handlePaletteDragStart(field.code)"
+                        @dragstart="handlePaletteDragStart($event, field.code)"
                       >
                         <div class="flex items-center justify-between gap-2">
                           <div class="font-medium">{{ field.label }}</div>
@@ -1322,6 +1698,46 @@ onMounted(async () => {
                         </div>
                         <div class="mt-1 text-xs text-gray-500">
                           {{ field.code }}
+                        </div>
+                        <div
+                          v-if="field.dataType === 'attachment'"
+                          class="mt-2"
+                        >
+                          <Tag color="processing">
+                            {{ getAttachmentModeLabel(field.attachmentMode) }}
+                          </Tag>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      v-if="compositePaletteModels.length > 0"
+                      class="space-y-2"
+                    >
+                      <div class="text-sm font-medium">组合模型素材</div>
+                      <div
+                        v-for="model in compositePaletteModels"
+                        :key="model.definitionId"
+                        class="cursor-move rounded-lg border p-3 transition"
+                        :class="[
+                          usedCompositeDefinitionIds.has(model.definitionId)
+                            ? 'border-dashed border-gray-200 bg-gray-50 text-gray-400'
+                            : 'border-amber-200 bg-amber-50/60 hover:border-amber-400',
+                        ]"
+                        :draggable="
+                          isEditable &&
+                          !usedCompositeDefinitionIds.has(model.definitionId)
+                        "
+                        @dragend="clearDragState"
+                        @dragstart="
+                          handleCompositePaletteDragStart($event, model)
+                        "
+                      >
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="font-medium">{{ model.label }}</div>
+                          <Tag color="gold">{{ model.relationType }}</Tag>
+                        </div>
+                        <div class="mt-1 text-xs text-gray-500">
+                          组合模型容器
                         </div>
                       </div>
                     </div>
@@ -1339,15 +1755,15 @@ onMounted(async () => {
                           ? 'border-primary bg-primary/5'
                           : 'border-gray-200',
                       ]"
-                      :draggable="isEditable"
                       :style="{
                         gridColumn: `span ${Math.min(section.span || 24, 24)} / span ${Math.min(section.span || 24, 24)}`,
                       }"
-                      @click="selectSection(section.id)"
+                      @click.self="selectSection(section.id)"
                       @dragend="clearDragState"
-                      @dragover="handleSectionBlockDragOver($event, index)"
-                      @dragstart="handleSectionBlockDragStart(section.id)"
-                      @drop="handleSectionBlockDrop(index)"
+                      @dragover="
+                        handleSectionBlockDragOver($event, section.id, index)
+                      "
+                      @drop="handleSectionBlockDrop(section.id, index)"
                     >
                       <div
                         v-if="sectionDropTarget?.index === index"
@@ -1357,18 +1773,30 @@ onMounted(async () => {
                         v-if="sectionDropTarget?.index === index + 1"
                         class="absolute inset-x-4 bottom-0 h-1 rounded-full bg-primary"
                       ></div>
-                      <div class="mb-4 flex items-center justify-between gap-3">
+                      <div
+                        class="mb-4 flex items-center justify-between gap-3"
+                        @click.stop="selectSection(section.id)"
+                      >
                         <div class="min-w-0 flex-1">
                           <div class="font-medium">{{ section.title }}</div>
                           <div
-                            v-if="section.collapsible"
+                            v-if="
+                              section.layout !== 'tabs' && section.collapsible
+                            "
                             class="text-xs text-gray-500"
                           >
                             {{
                               section.defaultExpanded ? '默认展开' : '默认收起'
                             }}
                           </div>
+                          <div
+                            v-else-if="section.layout === 'tabs'"
+                            class="text-xs text-gray-500"
+                          >
+                            TAB 页签分区
+                          </div>
                         </div>
+                        <div class="flex items-center gap-2">
                         <Button
                           :disabled="!isEditable"
                           danger
@@ -1378,12 +1806,14 @@ onMounted(async () => {
                         >
                           删除分区
                         </Button>
+                        </div>
                       </div>
 
                       <div
+                        v-if="section.layout !== 'tabs'"
                         class="grid min-h-[120px] grid-cols-24 gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3"
                         @dragover="handleSectionDragOver($event, section.id)"
-                        @drop="handleDrop(section.id, section.items.length)"
+                        @drop="handleDrop(section.id, undefined, section.items.length)"
                       >
                         <div
                           v-for="(item, fieldIndex) in section.items"
@@ -1395,7 +1825,9 @@ onMounted(async () => {
                               ? 'border-primary ring-1 ring-primary/20'
                               : 'border-gray-200',
                           ]"
-                          :draggable="isEditable"
+                          :draggable="
+                            isEditable && item.component !== 'CompositeModel'
+                          "
                           :style="{
                             gridColumn: `span ${Math.min(item.span, 24)} / span ${Math.min(item.span, 24)}`,
                           }"
@@ -1403,16 +1835,19 @@ onMounted(async () => {
                           @dragend="clearDragState"
                           @dragstart.stop="
                             handleFieldDragStart(
+                              $event,
                               section.id,
                               item.id,
                               item.fieldCode,
                               fieldIndex,
                             )
                           "
-                          @dragover="
+                          @dragover.stop="
                             handleFieldDragOver($event, section.id, fieldIndex)
                           "
-                          @drop.stop="handleDrop(section.id, fieldIndex)"
+                          @drop.stop="
+                            handleDrop(section.id, undefined, fieldIndex)
+                          "
                         >
                           <div
                             v-if="
@@ -1461,8 +1896,25 @@ onMounted(async () => {
                                 >*</span>
                             </div>
                             <div class="space-y-2 text-left">
+                              <div
+                                v-if="item.component === 'CompositeModel'"
+                                class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
+                              >
+                                <div class="flex items-center justify-between gap-2">
+                                  <div class="font-medium text-amber-900">
+                                    {{ item.label }}
+                                  </div>
+                                  <Tag color="gold">
+                                    {{ item.relationType || '组合模型' }}
+                                  </Tag>
+                                </div>
+                                <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                                  <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
+                                  <Tag color="blue">子模型设计单独维护</Tag>
+                                </div>
+                              </div>
                               <Input
-                                v-if="item.component === 'Input'"
+                                v-else-if="item.component === 'Input'"
                                 :placeholder="
                                   item.placeholder || `请输入${item.label}`
                                 "
@@ -1516,9 +1968,23 @@ onMounted(async () => {
                               />
                               <Upload
                                 v-else-if="item.component === 'Attachment'"
+                                :max-count="
+                                  isAttachmentMultiple(item.attachmentMode)
+                                    ? 9
+                                    : 1
+                                "
+                                :multiple="
+                                  isAttachmentMultiple(item.attachmentMode)
+                                "
                                 :disabled="true"
                               >
-                                <Button disabled>上传附件</Button>
+                                <Button disabled>
+                                  {{
+                                    isAttachmentMultiple(item.attachmentMode)
+                                      ? '上传多个附件'
+                                      : '上传附件'
+                                  }}
+                                </Button>
                               </Upload>
                               <Input
                                 v-else
@@ -1548,10 +2014,262 @@ onMounted(async () => {
                         <div
                           v-else-if="
                             dropTarget?.sectionId === section.id &&
+                            !dropTarget.tabId &&
                             dropTarget.index === section.items.length
                           "
                           class="col-span-24 h-1 rounded-full bg-primary"
                         ></div>
+                      </div>
+
+                      <div v-else class="rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3">
+                        <Tabs
+                          :active-key="
+                            activeDesignerTabs[section.id] ||
+                            section.defaultActiveTabId ||
+                            section.tabs[0]?.id
+                          "
+                          @change="(key) => handleTabsChange(section.id, String(key))"
+                        >
+                          <Tabs.TabPane
+                            v-for="tab in section.tabs"
+                            :key="tab.id"
+                            :tab="tab.title"
+                          >
+                            <div
+                              class="grid min-h-[120px] grid-cols-24 gap-3 rounded-lg border border-dashed border-gray-300 bg-white/80 p-3"
+                              @dragover="
+                                handleSectionDragOver($event, section.id, tab.id)
+                              "
+                              @drop="
+                                handleDrop(
+                                  section.id,
+                                  tab.id,
+                                  tab.items.length,
+                                )
+                              "
+                            >
+                              <div
+                                v-for="(item, fieldIndex) in tab.items"
+                                :key="item.id"
+                                class="relative rounded-lg border bg-white p-3 shadow-sm transition"
+                                :class="[
+                                  designerSelection?.type === 'field' &&
+                                  designerSelection.fieldId === item.id
+                                    ? 'border-primary ring-1 ring-primary/20'
+                                    : 'border-gray-200',
+                                ]"
+                                :draggable="
+                                  isEditable &&
+                                  item.component !== 'CompositeModel'
+                                "
+                                :style="{
+                                  gridColumn: `span ${Math.min(item.span, 24)} / span ${Math.min(item.span, 24)}`,
+                                }"
+                                @click.stop="
+                                  selectTabField(section.id, tab.id, item.id)
+                                "
+                                @dragend="clearDragState"
+                                @dragstart.stop="
+                                  handleFieldDragStart(
+                                    $event,
+                                    section.id,
+                                    item.id,
+                                    item.fieldCode,
+                                    fieldIndex,
+                                    tab.id,
+                                  )
+                                "
+                                @dragover.stop="
+                                  handleFieldDragOver(
+                                    $event,
+                                    section.id,
+                                    fieldIndex,
+                                    tab.id,
+                                  )
+                                "
+                                @drop.stop="
+                                  handleDrop(section.id, tab.id, fieldIndex)
+                                "
+                              >
+                                <div
+                                  v-if="
+                                    dropTarget?.sectionId === section.id &&
+                                    dropTarget?.tabId === tab.id &&
+                                    dropTarget.index === fieldIndex
+                                  "
+                                  class="absolute inset-x-3 top-0 h-1 rounded-full bg-primary"
+                                ></div>
+                                <div
+                                  v-if="
+                                    dropTarget?.sectionId === section.id &&
+                                    dropTarget?.tabId === tab.id &&
+                                    dropTarget.index === fieldIndex + 1
+                                  "
+                                  class="absolute inset-x-3 bottom-0 h-1 rounded-full bg-primary"
+                                ></div>
+                                <div class="flex items-start justify-end">
+                                  <Button
+                                    :disabled="!isEditable"
+                                    danger
+                                    size="small"
+                                    type="text"
+                                    @click.stop="
+                                      removeField(section.id, item.id, tab.id)
+                                    "
+                                  >
+                                    删除
+                                  </Button>
+                                </div>
+                                <div
+                                  :class="
+                                    item.labelLayout === 'horizontal'
+                                      ? 'mt-3 grid grid-cols-[3fr_7fr] items-center gap-3'
+                                      : 'mt-3 space-y-2'
+                                  "
+                                >
+                                  <div
+                                    class="text-sm font-medium text-gray-700"
+                                    :class="
+                                      item.labelLayout === 'horizontal'
+                                        ? 'text-right'
+                                        : ''
+                                    "
+                                  >
+                                    {{ item.label }}
+                                    <span
+                                      v-if="item.required"
+                                      class="ml-1 text-red-500"
+                                    >*</span>
+                                  </div>
+                                  <div class="space-y-2 text-left">
+                                  <div
+                                    v-if="item.component === 'CompositeModel'"
+                                    class="rounded-lg border border-amber-200 bg-amber-50/70 p-3"
+                                  >
+                                    <div class="flex items-center justify-between gap-2">
+                                      <div class="font-medium text-amber-900">
+                                        {{ item.label }}
+                                      </div>
+                                        <Tag color="gold">
+                                          {{ item.relationType || '组合模型' }}
+                                        </Tag>
+                                      </div>
+                                      <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                                        <Tag>{{ getCompositeDisplayModeLabel(item.displayMode) }}</Tag>
+                                        <Tag color="blue">子模型设计单独维护</Tag>
+                                      </div>
+                                    </div>
+                                    <Input
+                                      v-else-if="item.component === 'Input'"
+                                      :placeholder="
+                                        item.placeholder || `请输入${item.label}`
+                                      "
+                                      :readonly="true"
+                                      :value="item.defaultValue"
+                                    />
+                                    <Input.TextArea
+                                      v-else-if="item.component === 'Textarea'"
+                                      :placeholder="
+                                        item.placeholder || `请输入${item.label}`
+                                      "
+                                      :readonly="true"
+                                      :rows="4"
+                                      :value="item.defaultValue"
+                                    />
+                                    <InputNumber
+                                      v-else-if="item.component === 'InputNumber'"
+                                      :disabled="true"
+                                      class="w-full"
+                                      :placeholder="
+                                        item.placeholder || `请输入${item.label}`
+                                      "
+                                      :value="
+                                        item.defaultValue
+                                          ? Number(item.defaultValue)
+                                          : undefined
+                                      "
+                                    />
+                                    <DatePicker
+                                      v-else-if="item.component === 'DatePicker'"
+                                      :disabled="true"
+                                      class="w-full"
+                                      :placeholder="
+                                        item.placeholder || `请选择${item.label}`
+                                      "
+                                    />
+                                    <Select
+                                      v-else-if="item.component === 'Dict'"
+                                      :disabled="true"
+                                      class="w-full"
+                                      :options="getDictOptionsByCode(item.dictCode)"
+                                      :placeholder="
+                                        item.placeholder || `请选择${item.label}`
+                                      "
+                                      :value="item.defaultValue"
+                                    />
+                                    <Switch
+                                      v-else-if="item.component === 'Switch'"
+                                      :checked="!!item.defaultValue"
+                                      :disabled="true"
+                                    />
+                                    <Upload
+                                      v-else-if="item.component === 'Attachment'"
+                                      :max-count="
+                                        isAttachmentMultiple(item.attachmentMode)
+                                          ? 9
+                                          : 1
+                                      "
+                                      :multiple="
+                                        isAttachmentMultiple(item.attachmentMode)
+                                      "
+                                      :disabled="true"
+                                    >
+                                      <Button disabled>
+                                        {{
+                                          isAttachmentMultiple(
+                                            item.attachmentMode,
+                                          )
+                                            ? '上传多个附件'
+                                            : '上传附件'
+                                        }}
+                                      </Button>
+                                    </Upload>
+                                    <Input
+                                      v-else
+                                      :placeholder="
+                                        item.placeholder || `请输入${item.label}`
+                                      "
+                                      :readonly="true"
+                                      :value="item.defaultValue"
+                                    />
+                                    <div
+                                      v-if="item.readonly || !item.visible"
+                                      class="flex flex-wrap gap-2"
+                                    >
+                                      <Tag v-if="item.readonly">只读</Tag>
+                                      <Tag v-if="!item.visible">隐藏</Tag>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                v-if="tab.items.length === 0"
+                                class="col-span-24 flex items-center justify-center rounded-lg border border-dashed border-gray-300 px-4 py-10 text-sm text-gray-400"
+                              >
+                                将字段拖到当前页签，开始设计 TAB 内容
+                              </div>
+                              <div
+                                v-else-if="
+                                  dropTarget?.sectionId === section.id &&
+                                  dropTarget?.tabId === tab.id &&
+                                  dropTarget.index === tab.items.length
+                                "
+                                class="col-span-24 h-1 rounded-full bg-primary"
+                              ></div>
+                            </div>
+                          </Tabs.TabPane>
+                        </Tabs>
                       </div>
                     </div>
 
@@ -1563,10 +2281,10 @@ onMounted(async () => {
                         description="暂无分区，请先新增分区或重新生成表单"
                       />
                     </div>
-                  </div>
-                </Card>
+              </div>
+            </Card>
 
-                <Card size="small" title="属性配置">
+            <Card size="small" title="属性配置">
                   <template v-if="selectedField">
                     <div class="space-y-4">
                       <div class="text-xs text-gray-500">
@@ -1578,6 +2296,7 @@ onMounted(async () => {
                         placeholder="显示标题"
                       />
                       <Select
+                        v-if="selectedField.component !== 'CompositeModel'"
                         class="w-full"
                         :disabled="!isEditable"
                         v-model:value="selectedField.component"
@@ -1585,10 +2304,96 @@ onMounted(async () => {
                         placeholder="组件类型"
                       />
                       <Input
+                        v-else
+                        value="组合模型容器"
+                        disabled
+                      />
+                      <Input
                         :disabled="!isEditable"
                         v-model:value="selectedField.placeholder"
                         placeholder="占位提示"
                       />
+                      <div v-if="selectedField.component === 'CompositeModel'">
+                        <div class="mb-2 text-sm font-medium">组合模型</div>
+                        <Input
+                          :value="
+                            selectedField.relatedModelName || selectedField.label
+                          "
+                          disabled
+                        />
+                        <div class="mt-3">
+                          <div class="mb-2 text-sm font-medium">展示方式</div>
+                          <Select
+                            class="w-full"
+                            :disabled="!isEditable"
+                            v-model:value="selectedField.displayMode"
+                            :options="[
+                              { label: '面板', value: 'panel' },
+                              { label: '页签', value: 'tab' },
+                              { label: '明细表', value: 'table' },
+                            ]"
+                          />
+                        </div>
+                        <div
+                          v-if="selectedField.displayMode === 'table'"
+                          class="mt-3"
+                        >
+                          <div class="mb-2 text-sm font-medium">摘要列</div>
+                          <Select
+                            class="w-full"
+                            mode="multiple"
+                            :disabled="!isEditable"
+                            v-model:value="selectedField.summaryFieldCodes"
+                            :options="
+                              getCompositeFieldOptions(
+                                selectedField.relatedDefinitionId,
+                              )
+                            "
+                            placeholder="请选择明细表展示字段"
+                            show-search
+                            option-filter-prop="label"
+                            @dropdown-visible-change="
+                              handleCompositeSummaryDropdownVisibleChange(
+                                $event,
+                                selectedField.relatedDefinitionId,
+                              )
+                            "
+                          />
+                          <div class="mt-2 text-xs text-gray-500">
+                            未配置时，预览页会默认使用子模型前 5 个可见字段。
+                          </div>
+                        </div>
+                        <div
+                          class="mt-3 flex items-center justify-between gap-2 rounded-lg border border-gray-200 p-3"
+                        >
+                          <div class="text-xs text-gray-500">
+                            组合模型字段布局在子模型设计页单独维护。
+                          </div>
+                          <Button
+                            size="small"
+                            type="primary"
+                            @click="
+                              openCompositeModelDesigner(
+                                selectedField.relatedDefinitionId,
+                              )
+                            "
+                          >
+                            打开子模型设计
+                          </Button>
+                        </div>
+                      </div>
+                      <div v-if="selectedField.component === 'Attachment'">
+                        <div class="mb-2 text-sm font-medium">附件方式</div>
+                        <Input
+                          :value="
+                            getAttachmentModeLabel(selectedField.attachmentMode)
+                          "
+                          disabled
+                        />
+                        <div class="mt-2 text-xs text-gray-500">
+                          附件方式由字段定义决定，如需调整请回到字段维护页修改。
+                        </div>
+                      </div>
                       <div v-if="selectedField.component === 'Dict'">
                         <div class="mb-2 text-sm font-medium">选择字典</div>
                         <Select
@@ -1607,6 +2412,7 @@ onMounted(async () => {
                         placeholder="帮助文案"
                       />
                       <Input
+                        v-if="selectedField.component !== 'CompositeModel'"
                         :disabled="!isEditable"
                         v-model:value="selectedField.defaultValue"
                         placeholder="默认值"
@@ -1681,24 +2487,61 @@ onMounted(async () => {
                           :options="FIELD_SPAN_OPTIONS"
                         />
                       </div>
-                      <div
-                        class="space-y-3 rounded-lg border border-gray-200 p-3"
-                      >
-                        <div class="flex items-center justify-between">
-                          <span>可折叠</span>
-                          <Switch
-                            v-model:checked="selectedSection.collapsible"
-                            :disabled="!isEditable"
-                          />
+                      <template v-if="selectedSection.layout !== 'tabs'">
+                        <div
+                          class="space-y-3 rounded-lg border border-gray-200 p-3"
+                        >
+                          <div class="flex items-center justify-between">
+                            <span>可折叠</span>
+                            <Switch
+                              v-model:checked="selectedSection.collapsible"
+                              :disabled="!isEditable"
+                            />
+                          </div>
+                          <div class="flex items-center justify-between">
+                            <span>默认展开</span>
+                            <Switch
+                              v-model:checked="selectedSection.defaultExpanded"
+                              :disabled="!isEditable"
+                            />
+                          </div>
                         </div>
-                        <div class="flex items-center justify-between">
-                          <span>默认展开</span>
-                          <Switch
-                            v-model:checked="selectedSection.defaultExpanded"
-                            :disabled="!isEditable"
-                          />
+                      </template>
+                      <template v-else>
+                        <div class="space-y-3 rounded-lg border border-gray-200 p-3">
+                          <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium">TAB 页签</span>
+                            <Button
+                              :disabled="!isEditable"
+                              size="small"
+                              type="dashed"
+                              @click="addSectionTab(selectedSection.id)"
+                            >
+                              新增页签
+                            </Button>
+                          </div>
+                          <div
+                            v-for="tab in selectedSection.tabs"
+                            :key="tab.id"
+                            class="flex items-center gap-2"
+                          >
+                            <Input
+                              :disabled="!isEditable"
+                              v-model:value="tab.title"
+                              placeholder="页签标题"
+                            />
+                            <Button
+                              :disabled="!isEditable"
+                              danger
+                              size="small"
+                              type="text"
+                              @click="removeSectionTab(selectedSection.id, tab.id)"
+                            >
+                              删除
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      </template>
                     </div>
                   </template>
 

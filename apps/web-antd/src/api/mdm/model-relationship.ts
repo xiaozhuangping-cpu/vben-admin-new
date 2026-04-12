@@ -10,10 +10,14 @@ export interface ModelRelationship {
   sort?: number;
   sourceDefinitionId: string;
   sourceField: string;
+  sourceModelCode?: string;
+  sourceModelType?: string;
   sourceModelName?: string;
   status?: 'draft' | 'obsolete' | 'published';
   targetDefinitionId: string;
   targetField: string;
+  targetModelCode?: string;
+  targetModelType?: string;
   targetModelName?: string;
   updatedAt?: string;
 }
@@ -54,8 +58,18 @@ export async function getModelRelationshipListApi(params: any = {}) {
   const { items: definitions } = await getModelDefinitionListApi({
     pageSize: 1000,
   });
-  const definitionMap = new Map(
-    definitions.map((item: any) => [item.id, formatModelLabel(item)]),
+  const definitionMap = new Map<
+    string,
+    { code: string; label: string; modelType: string }
+  >(
+    definitions.map((item: any) => [
+      item.id,
+      {
+        code: item.code,
+        label: formatModelLabel(item),
+        modelType: item.modelType,
+      },
+    ]),
   );
 
   return {
@@ -65,11 +79,19 @@ export async function getModelRelationshipListApi(params: any = {}) {
       relationType: item.relation_type,
       sourceDefinitionId: item.source_definition_id,
       sourceField: item.source_field,
-      sourceModelName: definitionMap.get(item.source_definition_id) ?? '',
+      sourceModelCode: definitionMap.get(item.source_definition_id)?.code ?? '',
+      sourceModelName:
+        definitionMap.get(item.source_definition_id)?.label ?? '',
+      sourceModelType:
+        definitionMap.get(item.source_definition_id)?.modelType ?? '',
       sort: item.sort ?? 10,
       targetDefinitionId: item.target_definition_id,
       targetField: item.target_field,
-      targetModelName: definitionMap.get(item.target_definition_id) ?? '',
+      targetModelCode: definitionMap.get(item.target_definition_id)?.code ?? '',
+      targetModelName:
+        definitionMap.get(item.target_definition_id)?.label ?? '',
+      targetModelType:
+        definitionMap.get(item.target_definition_id)?.modelType ?? '',
       updatedAt: item.updated_at ?? item.created_at ?? '',
     })),
     total: parseTotal(response),

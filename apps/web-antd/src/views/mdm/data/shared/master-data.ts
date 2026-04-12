@@ -8,7 +8,7 @@ export interface MasterDataRecord {
   entityCode: string;
   entityName: string;
   id: string;
-  status: 'invalid' | 'normal' | 'pending';
+  status: 'draft' | 'invalid' | 'normal' | 'pending' | 'published';
   version: string;
   [key: string]: any;
 }
@@ -17,6 +17,7 @@ export interface MasterDataItem {
   description: string;
   definitionId?: string;
   dynamic?: boolean;
+  needAudit?: boolean;
   path: string;
   permissionCode: string;
   records: MasterDataRecord[];
@@ -514,6 +515,7 @@ export async function loadDynamicMasterDataItems(force = false) {
           item.description ||
           `基于数据模型 ${item.name} 动态生成的主数据维护列表。`,
         dynamic: true,
+        needAudit: item.needAudit ?? false,
         path: `${MASTER_DATA_BASE_PATH}/${slug}`,
         permissionCode: `mdm:data:model:${slug}`,
         records: [],

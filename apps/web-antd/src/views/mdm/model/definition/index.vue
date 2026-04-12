@@ -12,7 +12,8 @@ import {
   deleteModelDefinitionApi,
   getModelDefinitionDetailApi,
   getModelDefinitionListApi,
-  updateModelDefinitionEnabledApi,
+  publishModelDefinitionApi,
+  updateModelDefinitionStatusApi,
   upgradeModelDefinitionApi,
 } from '#/api/mdm/model-definition';
 
@@ -24,6 +25,7 @@ const router = useRouter();
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
   draft: { color: 'warning', label: '草稿' },
   history: { color: 'default', label: '历史' },
+  invalid: { color: 'default', label: '失效' },
   published: { color: 'success', label: '已发布' },
   revised: { color: 'processing', label: '升级' },
 };
@@ -134,14 +136,49 @@ function handleDelete(row: any) {
   });
 }
 
-async function handleToggleEnabled(row: any, enabled: boolean) {
-  try {
-    await updateModelDefinitionEnabledApi(row.id, enabled);
-    message.success(enabled ? '模型已启用' : '模型已禁用');
-    gridApi.reload();
-  } catch {
-    message.error(enabled ? '启用失败' : '禁用失败');
-  }
+function handlePublish(row: any) {
+  Modal.confirm({
+    title: '你确定要发布模型吗',
+    async onOk() {
+      try {
+        await publishModelDefinitionApi(row.id);
+        message.success('模型已发布');
+        gridApi.reload();
+      } catch {
+        message.error('发布失败');
+      }
+    },
+  });
+}
+
+function handleDisable(row: any) {
+  Modal.confirm({
+    title: '你确定要禁用模型吗',
+    async onOk() {
+      try {
+        await updateModelDefinitionStatusApi(row.id, 'invalid');
+        message.success('模型已禁用');
+        gridApi.reload();
+      } catch {
+        message.error('禁用失败');
+      }
+    },
+  });
+}
+
+function handleEnable(row: any) {
+  Modal.confirm({
+    title: '你确定要启用模型吗',
+    async onOk() {
+      try {
+        await updateModelDefinitionStatusApi(row.id, 'published');
+        message.success('模型已启用');
+        gridApi.reload();
+      } catch {
+        message.error('启用失败');
+      }
+    },
+  });
 }
 
 function refreshGrid() {
@@ -198,20 +235,28 @@ function refreshGrid() {
               删除
             </Button>
             <Button
-              v-if="row.status === 'published' && !row.enabled"
+              v-if="row.status === 'draft'"
               size="small"
               type="link"
-              @click="handleToggleEnabled(row, true)"
+              @click="handlePublish(row)"
             >
-              启用
+              发布
             </Button>
             <Button
-              v-if="row.status === 'published' && row.enabled"
+              v-if="row.status === 'published'"
               size="small"
               type="link"
-              @click="handleToggleEnabled(row, false)"
+              @click="handleDisable(row)"
             >
               禁用
+            </Button>
+            <Button
+              v-if="row.status === 'invalid'"
+              size="small"
+              type="link"
+              @click="handleEnable(row)"
+            >
+              启用
             </Button>
             <Button size="small" type="link" @click="handleConfigFields(row)">
               模型管理

@@ -22,7 +22,7 @@ export interface ModelDefinition {
   rootDefinitionId?: null | string;
   sortNo?: number;
   sourceDefinitionId?: null | string;
-  status: 'draft' | 'history' | 'published' | 'revised';
+  status: 'draft' | 'history' | 'invalid' | 'published' | 'revised';
   tableName?: string;
   themeId?: null | string;
   themeName?: string;
@@ -32,6 +32,7 @@ export interface ModelDefinition {
 }
 
 export interface ModelField {
+  attachmentMode?: null | string;
   code: string;
   dataType: string;
   defaultValue?: string;
@@ -117,6 +118,16 @@ const SYSTEM_MODEL_FIELD_META: Record<
 
 function getSystemModelFieldMeta(code?: string) {
   return code ? (SYSTEM_MODEL_FIELD_META[code] ?? null) : null;
+}
+
+function normalizeAttachmentMode(
+  attachmentMode?: null | string,
+  isMultiple?: boolean,
+) {
+  if (attachmentMode === 'single' || attachmentMode === 'multiple') {
+    return attachmentMode;
+  }
+  return isMultiple ? 'multiple' : 'single';
 }
 
 export interface ModelVersion {
@@ -302,8 +313,8 @@ export async function getModelDefinitionOptionsApi(
     includeHistory: true,
   });
   return items
-    .filter((item) => item.id && item.id !== params.excludeId)
-    .map((item) => ({
+    .filter((item: any) => item.id && item.id !== params.excludeId)
+    .map((item: any) => ({
       label: `${item.name} (${item.code})`,
       value: item.id as string,
     }));
@@ -463,7 +474,7 @@ export async function updateModelDefinitionApi(
   data: ModelDefinition,
 ) {
   const { auditGroupId, groupId } = await resolveGroupIds(data);
-  const isReadonlyStatus = ['history', 'published', 'revised'].includes(
+  const isReadonlyStatus = ['history', 'invalid', 'published', 'revised'].includes(
     data.status,
   );
   const payload = isReadonlyStatus
@@ -516,6 +527,26 @@ export async function updateModelDefinitionEnabledApi(
   );
 }
 
+export async function updateModelDefinitionStatusApi(
+  id: string,
+  status: ModelDefinition['status'],
+) {
+  const payload: Record<string, any> = { status };
+  if (status === 'published') {
+    payload.enabled = true;
+  } else if (status === 'invalid') {
+    payload.enabled = false;
+  }
+
+  return requestClient.request(
+    `/supabase-mdm/mdm_model_definitions?id=eq.${id}`,
+    {
+      data: payload,
+      method: 'PATCH',
+    },
+  );
+}
+
 export async function publishModelDefinitionApi(id: string) {
   return requestClient.post('/supabase-mdm/rpc/publish_model_definition', {
     p_definition_id: id,
@@ -556,15 +587,15 @@ export async function getModelFieldListApi(definitionId: string) {
   );
 
   const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
-  const dictCodes = [
-    ...new Set(
+  const dictCodes: string[] = [
+    ...new Set<string>(
       rawItems
         .map((item: any) => (item.dict_code ? String(item.dict_code) : ''))
         .filter(Boolean),
     ),
   ];
-  const relatedDefinitionIds = [
-    ...new Set(
+  const relatedDefinitionIds: string[] = [
+    ...new Set<string>(
       rawItems
         .map((item: any) =>
           item.related_definition_id ? String(item.related_definition_id) : '',
@@ -595,10 +626,16 @@ export async function getModelFieldListApi(definitionId: string) {
       : null;
     const systemFieldMeta = getSystemModelFieldMeta(item.code);
     const relatedDefinition = relatedDefinitionId
-      ? definitionMap.get(relatedDefinitionId)
-      : null;
+      ? (definitionMap.get(relatedDefinitionId) as
+          | undefined
+          | { code: string; name: string })
+      : undefined;
     return {
       ...item,
+      attachmentMode: normalizeAttachmentMode(
+        item.attachment_mode,
+        item.is_multiple,
+      ),
       name: systemFieldMeta?.name ?? item.name,
       remarks: systemFieldMeta?.remarks ?? item.remarks,
       dataType: item.data_type,
@@ -607,7 +644,10 @@ export async function getModelFieldListApi(definitionId: string) {
       dictCode,
       dictName: dictCode ? (dictMap.get(dictCode) ?? '') : '',
       isCodeField: item.is_code_field ?? false,
-      isMultiple: item.is_multiple,
+      isMultiple: normalizeAttachmentMode(
+        item.attachment_mode,
+        item.is_multiple,
+      ) === 'multiple',
       isPrimary: item.is_primary,
       isRequired: item.is_required,
       isUnique: item.is_unique,
@@ -668,18 +708,23 @@ function buildModelFieldPayload(
   data: ModelField,
   options?: { isPublished?: boolean },
 ) {
+  const isAttachmentType = data.dataType === 'attachment';
   const isDictType = data.dataType === 'dict';
   const isRelationType = data.dataType === 'relation_master';
   const isPublished = options?.isPublished ?? false;
+  const attachmentMode = isAttachmentType
+    ? normalizeAttachmentMode(data.attachmentMode, data.isMultiple)
+    : null;
 
   return {
     ...(isPublished
       ? {}
       : {
+          attachment_mode: attachmentMode,
           code: data.code,
           data_type: data.dataType,
           is_code_field: !!data.isCodeField,
-          is_multiple: !!data.isMultiple,
+          is_multiple: attachmentMode === 'multiple',
           is_primary: !!data.isPrimary,
           is_required: !!data.isRequired,
           is_unique: !!data.isUnique,
@@ -719,6 +764,7 @@ function shouldFallbackModelFieldColumns(error: any) {
 
 function stripOptionalModelFieldColumns(payload: Record<string, any>) {
   const {
+    attachment_mode: _attachmentMode,
     dict_code: _dictCode,
     is_code_field: _isCodeField,
     numbering_segment_id: _numberingSegmentId,

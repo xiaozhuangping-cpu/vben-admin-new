@@ -1,11 +1,24 @@
+import type { UploadFile } from 'ant-design-vue';
+
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeGridProps } from '#/adapter/vxe-table';
 import type { ModelField } from '#/api/mdm/model-definition';
-import type { UploadFile, UploadProps } from 'ant-design-vue';
 
 import { message } from 'ant-design-vue';
 
 import { uploadFileToSupabaseStorage } from '#/api/mdm/storage';
+import { formatDateTime } from '#/utils/date';
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  draft: '草稿',
+  history: '历史版本',
+  invalid: '失效',
+  normal: '正常',
+  pending: '待审核',
+  published: '已发布',
+  rejected: '审核不通过',
+  revised: '已修订',
+};
 
 export const useColumns = (
   routeName?: string,
@@ -70,12 +83,65 @@ export const useColumns = (
 
 export const buildDynamicColumns = (
   fields: ModelField[],
+  dictOptionsMap: Record<string, Array<{ label: string; value: string }>> = {},
 ): VxeGridProps<any>['columns'] => {
-  const mapped = fields.map((field) => ({
-    field: field.code.toLowerCase(),
-    minWidth: 150,
-    title: field.name,
-  }));
+  const hiddenFieldCodes = new Set(['created_by', 'id', 'updated_by']);
+  const mapped = fields
+    .filter((field) => field.status !== false)
+    .filter((field) => !hiddenFieldCodes.has(field.code.toLowerCase()))
+    .filter(
+      (field) =>
+        !['created_at', 'updated_at'].includes(field.code.toLowerCase()),
+    )
+    .filter((field) => field.dataType !== 'attachment')
+    .map((field) => {
+      const fieldCode = field.code.toLowerCase();
+      const dictOptions = field.dictCode
+        ? (dictOptionsMap[field.dictCode] ?? [])
+        : [];
+      let formatter:
+        | ((params: { cellValue?: string }) => string)
+        | undefined;
+
+      if (fieldCode === 'status') {
+        formatter = ({ cellValue }: { cellValue?: string }) => {
+          if (
+            cellValue === null ||
+            cellValue === undefined ||
+            cellValue === ''
+          ) {
+            return '-';
+          }
+
+          return STATUS_LABEL_MAP[String(cellValue)] ?? String(cellValue);
+        };
+      } else if (field.dataType === 'dict') {
+        formatter = ({ cellValue }: { cellValue?: string }) => {
+          if (
+            cellValue === null ||
+            cellValue === undefined ||
+            cellValue === ''
+          ) {
+            return '-';
+          }
+
+          return (
+            dictOptions.find((item) => item.value === String(cellValue))
+              ?.label ?? String(cellValue)
+          );
+        };
+      } else if (['date', 'timestamptz'].includes(field.dataType)) {
+        formatter = ({ cellValue }: { cellValue?: string }) =>
+          formatDateTime(cellValue);
+      }
+
+      return {
+        field: fieldCode,
+        formatter,
+        minWidth: 150,
+        title: field.name,
+      };
+    });
 
   return [
     { title: '序号', type: 'seq', width: 60 },
@@ -154,7 +220,10 @@ export const buildDynamicFormSchema = (
       }
 
       if (field.dataType === 'attachment') {
-        const maxCount = field.isMultiple ? 9 : 1;
+        const isMultiple =
+          field.attachmentMode === 'multiple' ||
+          (!!field.isMultiple && field.attachmentMode !== 'single');
+        const maxCount = isMultiple ? 9 : 1;
 
         return {
           ...common,
@@ -178,17 +247,17 @@ export const buildDynamicFormSchema = (
             },
             listType: 'text',
             maxCount,
-            multiple: !!field.isMultiple,
+            multiple: isMultiple,
             onHandleChange: (event: { file: UploadFile; fileList: UploadFile[] }) => {
               const uploadedUrl =
                 event.file?.response?.url || event.file?.url || '';
               if (uploadedUrl) {
                 event.file.url = uploadedUrl;
               }
-              event.fileList = event.fileList.map((item) => ({
+              event.fileList = (event.fileList ?? []).map((item) => ({
                 ...item,
                 url: item.url || item.response?.url,
-              })) as UploadProps['fileList'];
+              }));
             },
             placeholder: `请上传${field.name}`,
           },

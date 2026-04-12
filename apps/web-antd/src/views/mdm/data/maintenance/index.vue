@@ -9,6 +9,7 @@ import { Page, useVbenModal } from '@vben/common-ui';
 import { Button, message, Select, Space, Tag } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { getDictItemOptionsApi } from '#/api/mdm/dict';
 import { getDynamicMasterDataRecordsApi } from '#/api/mdm/master-data';
 import { getModelFieldListApi } from '#/api/mdm/model-definition';
 
@@ -21,16 +22,30 @@ import { buildDynamicColumns, useColumns, useSearchSchema } from './data';
 import DataFormModal from './modules/form.vue';
 
 const STATUS_MAP: Record<string, { color: string; label: string }> = {
+  draft: { color: 'default', label: '草稿' },
+  history: { color: 'default', label: '历史版本' },
   invalid: { color: 'default', label: '失效' },
   normal: { color: 'success', label: '正常' },
-  pending: { color: 'warning', label: '审核中' },
+  pending: { color: 'warning', label: '待审核' },
+  published: { color: 'success', label: '已发布' },
+  rejected: { color: 'error', label: '审核不通过' },
+  revised: { color: 'processing', label: '已修订' },
 };
+
+function getStatusMeta(status?: string) {
+  if (!status) {
+    return { color: 'default', label: '-' };
+  }
+
+  return STATUS_MAP[status] ?? { color: 'default', label: status };
+}
 
 const route = useRoute();
 const router = useRouter();
 const currentMasterData = ref<any>(null);
 const selectOptions = ref(getMasterDataSelectOptions());
 const currentFields = ref<any[]>([]);
+const currentDictOptionsMap = ref<Record<string, any[]>>({});
 
 const [Form, formModalApi] = useVbenModal({
   connectedComponent: DataFormModal,
@@ -55,8 +70,9 @@ const gridOptions: VxeGridProps<any> = {
             currentMasterData.value.definitionId,
           );
           currentFields.value = fields;
+          currentDictOptionsMap.value = await loadDictOptionsMap(fields);
           gridApi.setGridOptions({
-            columns: buildDynamicColumns(fields),
+            columns: buildDynamicColumns(fields, currentDictOptionsMap.value),
           });
 
           return await getDynamicMasterDataRecordsApi(
@@ -104,6 +120,7 @@ async function resolveCurrentMasterData() {
     String(route.name ?? ''),
   );
   currentFields.value = [];
+  currentDictOptionsMap.value = {};
 
   if (!currentMasterData.value) {
     const [firstOption] = selectOptions.value;
@@ -118,9 +135,33 @@ async function resolveCurrentMasterData() {
     currentFields.value = await getModelFieldListApi(
       currentMasterData.value.definitionId,
     );
+    currentDictOptionsMap.value = await loadDictOptionsMap(currentFields.value);
   }
 
   gridApi.reload();
+}
+
+async function loadDictOptionsMap(fields: any[]) {
+  const dictCodes = [
+    ...new Set(
+      fields
+        .filter((field: any) => field.dataType === 'dict' && field.dictCode)
+        .map((field: any) => String(field.dictCode)),
+    ),
+  ];
+
+  if (dictCodes.length === 0) {
+    return {};
+  }
+
+  const optionsList = await Promise.all(
+    dictCodes.map(async (dictCode) => [
+      dictCode,
+      await getDictItemOptionsApi(dictCode),
+    ]),
+  );
+
+  return Object.fromEntries(optionsList);
 }
 
 function handleCreate() {
@@ -130,8 +171,10 @@ function handleCreate() {
   }
   formModalApi
     .setData({
+      definitionId: currentMasterData.value.definitionId,
       fields: currentFields.value,
       masterDataTitle: currentMasterData.value.title,
+      needAudit: currentMasterData.value.needAudit ?? false,
       onSuccess: refreshGrid,
       tableName: currentMasterData.value.tableName,
     })
@@ -145,8 +188,10 @@ function handleEdit(row: any) {
   formModalApi
     .setData({
       ...row,
+      definitionId: currentMasterData.value.definitionId,
       fields: currentFields.value,
       masterDataTitle: currentMasterData.value.title,
+      needAudit: currentMasterData.value.needAudit ?? false,
       onSuccess: refreshGrid,
       tableName: currentMasterData.value.tableName,
     })
@@ -221,8 +266,8 @@ watch(
         :table-title="`${currentMasterData.title}记录`"
       >
         <template #status="{ row }">
-          <Tag :color="STATUS_MAP[row.status]?.color">
-            {{ STATUS_MAP[row.status]?.label }}
+          <Tag :color="getStatusMeta(row.status).color">
+            {{ getStatusMeta(row.status).label }}
           </Tag>
         </template>
 

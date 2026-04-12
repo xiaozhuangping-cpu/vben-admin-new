@@ -75,3 +75,10 @@ export async function updateDynamicMasterDataRecordApi(
     ? response.data.data[0]
     : response.data;
 }
+
+export async function deleteDynamicMasterDataRecordApi(
+  tableName: string,
+  id: string,
+) {
+  return requestClient.delete(`/supabase-mdm/${tableName}?id=eq.${id}`);
+}

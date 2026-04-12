@@ -6,7 +6,10 @@ import { useVbenModal } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
-import { getDictDefinitionOptionsApi } from '#/api/mdm/dict';
+import {
+  getDictDefinitionOptionsApi,
+  getDictItemOptionsApi,
+} from '#/api/mdm/dict';
 import {
   createModelFieldApi,
   getModelDefinitionOptionsApi,
@@ -32,6 +35,16 @@ const getDefinitionOptions = () =>
 const getTitle = computed(() => {
   return currentData.value?.id ? '编辑模型字段' : '新增模型字段';
 });
+
+function getInitialAttachmentMode(data: any) {
+  if (data?.attachmentMode) {
+    return data.attachmentMode;
+  }
+  if (data?.dataType === 'attachment') {
+    return data?.isMultiple ? 'multiple' : 'single';
+  }
+  return null;
+}
 
 const [Form, formApi] = useVbenForm({
   layout: 'vertical',
@@ -64,7 +77,7 @@ const [Form, formApi] = useVbenForm({
           { label: '时间', value: 'timestamptz' },
           { label: '字典', value: 'dict' },
           { label: '关联主数据', value: 'relation_master' },
-          { label: '附件(URL)', value: 'attachment' },
+          { label: '附件', value: 'attachment' },
         ],
         placeholder: '请选择数据类型',
       },
@@ -112,7 +125,7 @@ const [Form, formApi] = useVbenForm({
       label: '是否编码字段',
       defaultValue: false,
       dependencies: {
-        ifShow: ({ values }) => values.dataType !== 'attachment',
+        show: (values) => values.dataType !== 'attachment',
         triggerFields: ['dataType'],
       },
     },
@@ -125,7 +138,7 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'numberingSegmentId',
       label: '码段',
       dependencies: {
-        ifShow: ({ values }) =>
+        show: (values) =>
           values.dataType !== 'attachment' && values.isCodeField === true,
         triggerFields: ['dataType', 'isCodeField'],
       },
@@ -141,7 +154,7 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'dictCode',
       label: '关联字典',
       dependencies: {
-        ifShow: ({ values }) => values.dataType === 'dict',
+        show: (values) => values.dataType === 'dict',
         rules: ({ dataType }) =>
           dataType === 'dict' ? 'selectRequired' : null,
         triggerFields: ['dataType'],
@@ -158,9 +171,25 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'relatedDefinitionId',
       label: '关联主数据',
       dependencies: {
-        ifShow: ({ values }) => values.dataType === 'relation_master',
+        show: (values) => values.dataType === 'relation_master',
         rules: ({ dataType }) =>
           dataType === 'relation_master' ? 'selectRequired' : null,
+        triggerFields: ['dataType'],
+      },
+    },
+    {
+      component: 'ApiSelect',
+      componentProps: {
+        api: async () => await getDictItemOptionsApi('mdm_model_attachment'),
+        placeholder: '请选择附件方式',
+      },
+      fieldName: 'attachmentMode',
+      label: '附件方式',
+      defaultValue: 'single',
+      dependencies: {
+        show: (values) => values.dataType === 'attachment',
+        rules: ({ dataType }) =>
+          dataType === 'attachment' ? 'selectRequired' : null,
         triggerFields: ['dataType'],
       },
     },
@@ -192,7 +221,7 @@ const [Form, formApi] = useVbenForm({
       component: 'Textarea',
       componentProps: {
         placeholder:
-          '附件类型建议直接填写 Supabase Storage 文件 URL，不再区分多附件字段。',
+          '附件字段通过“附件方式”控制单附件/多附件，上传文件统一存储为附件对象。',
       },
       fieldName: 'remarks',
       formItemClass: 'md:cols-span-2',
@@ -220,8 +249,16 @@ const [Modal, modalApi] = useVbenModal({
         message.warning('编码字段必须选择码段。');
         return;
       }
-      if (!values.isCodeField) {
+      if (values.isCodeField) {
+        // keep current numbering segment
+      } else {
         values.numberingSegmentId = null;
+      }
+      if (values.dataType === 'attachment') {
+        values.attachmentMode = values.attachmentMode || 'single';
+        values.isMultiple = values.attachmentMode === 'multiple';
+      } else {
+        values.attachmentMode = null;
       }
       if (isPublishedEditMode.value) {
         const originalLength = currentData.value?.length;
@@ -332,6 +369,12 @@ const [Modal, modalApi] = useVbenModal({
         },
       },
       {
+        fieldName: 'attachmentMode',
+        componentProps: {
+          disabled: isSystemField || isRevisedMode || isPublishedMode,
+        },
+      },
+      {
         fieldName: 'isPrimary',
         componentProps: {
           disabled: isSystemField || isRevisedMode || isPublishedMode,
@@ -379,7 +422,9 @@ const [Modal, modalApi] = useVbenModal({
       },
     ]);
     formApi.setValues({
+      attachmentMode: getInitialAttachmentMode(data),
       isCodeField: false,
+      isMultiple: false,
       numberingSegmentId: null,
       dictCode: null,
       relatedDefinitionId: null,
