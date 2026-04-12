@@ -17,6 +17,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   DatePicker,
   Descriptions,
   Empty,
@@ -35,6 +36,10 @@ import {
 } from 'ant-design-vue';
 
 import { getDictItemOptionsApi, getDictListApi } from '#/api/mdm/dict';
+import {
+  getModelDataAuthConfigApi,
+  saveModelDataAuthConfigApi,
+} from '#/api/mdm/model-data-auth';
 import {
   deleteModelFieldApi,
   getModelDefinitionDetailApi,
@@ -111,14 +116,15 @@ type SectionDropTarget = {
   index: number;
 };
 
-type AuthConfig = {
-  canAudit: boolean;
-  canEdit: boolean;
-  canManage: boolean;
-  canPublish: boolean;
-  canView: boolean;
-  targetId: string;
-  targetName: string;
+type AuthFieldPermission = {
+  canRead: boolean;
+  canWrite: boolean;
+};
+
+type AuthGroupOption = {
+  disabled?: boolean;
+  label: string;
+  value: string;
 };
 
 type DictOption = {
@@ -143,13 +149,16 @@ const authLoading = ref(false);
 
 const currentDefinition = ref<any>(null);
 const fields = ref<any[]>([]);
+const authFieldPermissionMap = ref<Record<string, AuthFieldPermission>>({});
+const authGroupOptions = ref<AuthGroupOption[]>([]);
+const authRowFilterSql = ref('');
+const authSelectedGroupIds = ref<string[]>([]);
 const compositeFieldOptionsMap = ref<Record<string, DictOption[]>>({});
 const compositeFieldRequestMap = new Map<string, Promise<void>>();
 const dictDefinitions = ref<DictDefinitionOption[]>([]);
 const dictItemOptionsMap = ref<Record<string, DictOption[]>>({});
 const relationships = ref<any[]>([]);
 const versions = ref<any[]>([]);
-const authConfigs = ref<AuthConfig[]>([]);
 const designerSchema = ref<FormDesignerSchema>({
   sections: [],
   version: 1,
@@ -249,6 +258,46 @@ const FIELD_SPAN_OPTIONS = [
 ];
 
 const fieldMetaMap = computed(() => buildFieldMetaMap(fields.value));
+const authFieldRows = computed(() =>
+  fields.value.map((field) => {
+    const permission = authFieldPermissionMap.value[field.id] ?? {
+      canRead: false,
+      canWrite: false,
+    };
+
+    return {
+      ...field,
+      canRead: permission.canRead,
+      canWrite: permission.canWrite,
+    };
+  }),
+);
+const authReadableFieldRows = computed(() =>
+  authFieldRows.value.filter((field) => !!field.id),
+);
+const authWritableFieldRows = computed(() =>
+  authFieldRows.value.filter((field) => !!field.id && !field.systemField),
+);
+const authReadAllChecked = computed(
+  () =>
+    authReadableFieldRows.value.length > 0 &&
+    authReadableFieldRows.value.every((field) => field.canRead),
+);
+const authReadPartialChecked = computed(
+  () =>
+    authReadableFieldRows.value.some((field) => field.canRead) &&
+    !authReadAllChecked.value,
+);
+const authWriteAllChecked = computed(
+  () =>
+    authWritableFieldRows.value.length > 0 &&
+    authWritableFieldRows.value.every((field) => field.canWrite),
+);
+const authWritePartialChecked = computed(
+  () =>
+    authWritableFieldRows.value.some((field) => field.canWrite) &&
+    !authWriteAllChecked.value,
+);
 
 function getFieldAttachmentMode(field: any) {
   if (field?.attachmentMode) {
@@ -420,13 +469,12 @@ const versionColumns: TableColumnsType = [
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
 ];
 
-const authColumns: TableColumnsType = [
-  { title: '授权对象', dataIndex: 'targetName', key: 'targetName', width: 220 },
-  { title: '查看', dataIndex: 'canView', key: 'canView', width: 90 },
-  { title: '维护', dataIndex: 'canEdit', key: 'canEdit', width: 90 },
-  { title: '审核', dataIndex: 'canAudit', key: 'canAudit', width: 90 },
-  { title: '发布', dataIndex: 'canPublish', key: 'canPublish', width: 90 },
-  { title: '管理', dataIndex: 'canManage', key: 'canManage', width: 90 },
+const authFieldColumns: TableColumnsType = [
+  { title: '字段名称', dataIndex: 'name', key: 'name', minWidth: 180 },
+  { title: '字段编码', dataIndex: 'code', key: 'code', width: 180 },
+  { title: '字段类型', dataIndex: 'dataType', key: 'dataType', width: 140 },
+  { title: '读取', dataIndex: 'canRead', key: 'canRead', width: 90 },
+  { title: '写入', dataIndex: 'canWrite', key: 'canWrite', width: 90 },
 ];
 
 function getSafeStorage<T>(key: string, fallback: T): T {
@@ -455,8 +503,99 @@ function setSafeSessionStorage(key: string, value: unknown) {
   window.sessionStorage.setItem(key, JSON.stringify(value));
 }
 
-function getAuthStorageKey() {
-  return `mdm:model:auth:${modelId.value}`;
+function buildAuthFieldPermissionMap(
+  permissions: Array<{ canRead?: boolean; canWrite?: boolean; fieldId: string }>,
+) {
+  return Object.fromEntries(
+    permissions
+      .filter((item) => item.fieldId)
+      .map((item) => [
+        String(item.fieldId),
+        {
+          canRead: !!(item.canRead || item.canWrite),
+          canWrite: !!item.canWrite,
+        },
+      ]),
+  );
+}
+
+function ensureAuthFieldPermissionMap() {
+  const nextMap = { ...authFieldPermissionMap.value };
+
+  for (const field of fields.value) {
+    if (!field?.id || nextMap[field.id]) {
+      continue;
+    }
+
+    nextMap[field.id] = {
+      canRead: false,
+      canWrite: false,
+    };
+  }
+
+  for (const fieldId of Object.keys(nextMap)) {
+    if (!fields.value.some((field) => field.id === fieldId)) {
+      delete nextMap[fieldId];
+    }
+  }
+
+  authFieldPermissionMap.value = nextMap;
+}
+
+function updateAuthFieldRead(fieldId: string, checked: boolean) {
+  const current = authFieldPermissionMap.value[fieldId] ?? {
+    canRead: false,
+    canWrite: false,
+  };
+
+  authFieldPermissionMap.value = {
+    ...authFieldPermissionMap.value,
+    [fieldId]: {
+      canRead: checked,
+      canWrite: checked ? current.canWrite : false,
+    },
+  };
+}
+
+function updateAuthFieldWrite(fieldId: string, checked: boolean) {
+  const current = authFieldPermissionMap.value[fieldId] ?? {
+    canRead: false,
+    canWrite: false,
+  };
+
+  authFieldPermissionMap.value = {
+    ...authFieldPermissionMap.value,
+    [fieldId]: {
+      canRead: checked ? true : current.canRead,
+      canWrite: checked,
+    },
+  };
+}
+
+function toggleAllAuthFieldRead(checked: boolean) {
+  const nextMap = { ...authFieldPermissionMap.value };
+
+  for (const field of authReadableFieldRows.value) {
+    nextMap[String(field.id)] = {
+      canRead: checked,
+      canWrite: checked ? !!nextMap[String(field.id)]?.canWrite : false,
+    };
+  }
+
+  authFieldPermissionMap.value = nextMap;
+}
+
+function toggleAllAuthFieldWrite(checked: boolean) {
+  const nextMap = { ...authFieldPermissionMap.value };
+
+  for (const field of authWritableFieldRows.value) {
+    nextMap[String(field.id)] = {
+      canRead: checked ? true : !!nextMap[String(field.id)]?.canRead,
+      canWrite: checked,
+    };
+  }
+
+  authFieldPermissionMap.value = nextMap;
 }
 
 function getDictOptionsByCode(dictCode?: string) {
@@ -1033,6 +1172,7 @@ async function loadFields() {
   fieldLoading.value = true;
   try {
     fields.value = await getModelFieldListApi(modelId.value);
+    ensureAuthFieldPermissionMap();
   } finally {
     fieldLoading.value = false;
   }
@@ -1068,21 +1208,28 @@ async function loadVersions() {
 }
 
 async function loadAuthConfig() {
+  if (!modelId.value) {
+    return;
+  }
   authLoading.value = true;
   try {
-    const { items } = await getUserGroupListApi({ pageSize: 1000 });
-    const stored = getSafeStorage<AuthConfig[]>(getAuthStorageKey(), []);
-    const storedMap = new Map(stored.map((item) => [item.targetId, item]));
+    const [{ items: userGroups }, authConfig] = await Promise.all([
+      getUserGroupListApi({ pageSize: 1000 }),
+      getModelDataAuthConfigApi(modelId.value),
+    ]);
 
-    authConfigs.value = items.map((item: any) => ({
-      canAudit: storedMap.get(item.id)?.canAudit ?? false,
-      canEdit: storedMap.get(item.id)?.canEdit ?? false,
-      canManage: storedMap.get(item.id)?.canManage ?? false,
-      canPublish: storedMap.get(item.id)?.canPublish ?? false,
-      canView: storedMap.get(item.id)?.canView ?? true,
-      targetId: item.id,
-      targetName: item.name,
-    }));
+    authGroupOptions.value = userGroups
+      .filter((item: any) => item.status !== false)
+      .map((item: any) => ({
+        label: item.name,
+        value: String(item.id),
+      }));
+    authSelectedGroupIds.value = authConfig.groupIds;
+    authRowFilterSql.value = authConfig.rowFilterSql ?? '';
+    authFieldPermissionMap.value = buildAuthFieldPermissionMap(
+      authConfig.fieldPermissions,
+    );
+    ensureAuthFieldPermissionMap();
   } finally {
     authLoading.value = false;
   }
@@ -1127,9 +1274,9 @@ async function initializePage() {
     loadFields(),
     loadRelationships(),
     loadVersions(),
-    loadAuthConfig(),
     loadDictDefinitions(),
   ]);
+  await loadAuthConfig();
   await refreshDesignerSchema();
 }
 
@@ -1176,9 +1323,39 @@ function toggleWorkspaceFullscreen() {
   workspaceFullscreen.value = !workspaceFullscreen.value;
 }
 
-function saveAuthConfig() {
-  setSafeStorage(getAuthStorageKey(), authConfigs.value);
-  message.success('授权配置已保存');
+async function saveAuthConfig() {
+  if (!modelId.value) {
+    return;
+  }
+
+  try {
+    authLoading.value = true;
+    await saveModelDataAuthConfigApi({
+      definitionId: modelId.value,
+      fieldPermissions: fields.value
+        .filter((field) => field?.id)
+        .map((field) => {
+          const permission = authFieldPermissionMap.value[field.id] ?? {
+            canRead: false,
+            canWrite: false,
+          };
+
+          return {
+            canRead: permission.canRead,
+            canWrite: permission.canWrite,
+            fieldId: String(field.id),
+          };
+        }),
+      groupIds: authSelectedGroupIds.value,
+      rowFilterSql: authRowFilterSql.value,
+      status: true,
+    });
+    message.success('数据授权配置已保存');
+  } catch {
+    message.error('数据授权配置保存失败');
+  } finally {
+    authLoading.value = false;
+  }
 }
 
 function handleEditModel() {
@@ -1914,8 +2091,7 @@ onMounted(async () => {
                               <span
                                 v-if="item.required"
                                 class="ml-1 text-red-500"
-                                >*</span
-                              >
+                                >*</span>
                             </div>
                             <div class="space-y-2 text-left">
                               <div
@@ -1933,11 +2109,13 @@ onMounted(async () => {
                                   </Tag>
                                 </div>
                                 <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                  <Tag>{{
+                                  <Tag>
+{{
                                     getCompositeDisplayModeLabel(
                                       item.displayMode,
                                     )
-                                  }}</Tag>
+                                  }}
+</Tag>
                                   <Tag color="blue">子模型设计单独维护</Tag>
                                 </div>
                               </div>
@@ -2172,8 +2350,7 @@ onMounted(async () => {
                                     <span
                                       v-if="item.required"
                                       class="ml-1 text-red-500"
-                                      >*</span
-                                    >
+                                      >*</span>
                                   </div>
                                   <div class="space-y-2 text-left">
                                     <div
@@ -2193,14 +2370,16 @@ onMounted(async () => {
                                       <div
                                         class="mt-2 flex flex-wrap gap-2 text-xs"
                                       >
-                                        <Tag>{{
+                                        <Tag>
+{{
                                           getCompositeDisplayModeLabel(
                                             item.displayMode,
                                           )
-                                        }}</Tag>
-                                        <Tag color="blue"
-                                          >子模型设计单独维护</Tag
-                                        >
+                                        }}
+</Tag>
+                                        <Tag color="blue">
+子模型设计单独维护
+</Tag>
                                       </div>
                                     </div>
                                     <Input
@@ -2615,40 +2794,113 @@ onMounted(async () => {
               </div>
             </Tabs.TabPane>
 
-            <Tabs.TabPane key="auth" tab="授权">
+            <Tabs.TabPane key="auth" tab="数据授权">
               <div class="mb-4 flex items-start justify-between gap-3">
                 <Alert
                   class="flex-1"
-                  message="当前使用用户组作为授权对象，权限配置先保存在浏览器本地，后续可平滑替换成后端接口。"
+                  message="多个被授权用户组共用同一份行权限 SQL；列权限按当前模型全部字段统一配置。"
                   show-icon
                   type="info"
                 />
-                <Button type="primary" @click="saveAuthConfig">保存授权</Button>
+                <Button :loading="authLoading" type="primary" @click="saveAuthConfig">
+                  保存数据授权
+                </Button>
               </div>
 
-              <Table
-                :columns="authColumns"
-                :data-source="authConfigs"
-                :loading="authLoading"
-                :pagination="false"
-                row-key="targetId"
-              >
-                <template #bodyCell="{ column, record }">
-                  <template
-                    v-if="
-                      [
-                        'canView',
-                        'canEdit',
-                        'canAudit',
-                        'canPublish',
-                        'canManage',
-                      ].includes(String(column.key))
-                    "
+              <Card class="mb-4" size="small" title="被授权用户组">
+                <Select
+                  v-model:value="authSelectedGroupIds"
+                  mode="multiple"
+                  :options="authGroupOptions"
+                  :loading="authLoading"
+                  :max-tag-count="6"
+                  class="w-full"
+                  placeholder="请选择被授权用户组"
+                  option-filter-prop="label"
+                  show-search
+                />
+              </Card>
+
+              <div class="grid grid-cols-1 gap-4 xl:grid-cols-10">
+                <Card class="xl:col-span-6" size="small" title="列权限配置">
+                  <Table
+                    :columns="authFieldColumns"
+                    :data-source="authFieldRows"
+                    :loading="authLoading || fieldLoading"
+                    :pagination="false"
+                    :scroll="{ x: 680, y: 520 }"
+                    row-key="id"
+                    size="small"
                   >
-                    <Switch v-model:checked="record[String(column.key)]" />
-                  </template>
-                </template>
-              </Table>
+                    <template #headerCell="{ column }">
+                      <template v-if="column.key === 'canRead'">
+                        <div class="flex items-center justify-center gap-2">
+                          <span>读取</span>
+                          <Checkbox
+                            :checked="authReadAllChecked"
+                            :indeterminate="authReadPartialChecked"
+                            @change="
+                              toggleAllAuthFieldRead($event.target.checked)
+                            "
+                          />
+                        </div>
+                      </template>
+                      <template v-else-if="column.key === 'canWrite'">
+                        <div class="flex items-center justify-center gap-2">
+                          <span>写入</span>
+                          <Checkbox
+                            :checked="authWriteAllChecked"
+                            :indeterminate="authWritePartialChecked"
+                            @change="
+                              toggleAllAuthFieldWrite($event.target.checked)
+                            "
+                          />
+                        </div>
+                      </template>
+                    </template>
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'dataType'">
+                        {{ fieldTypeMap[record.dataType] ?? record.dataType }}
+                      </template>
+                      <template v-else-if="column.key === 'canRead'">
+                        <Checkbox
+                          :checked="record.canRead"
+                          @change="
+                            updateAuthFieldRead(
+                              String(record.id),
+                              $event.target.checked,
+                            )
+                          "
+                        />
+                      </template>
+                      <template v-else-if="column.key === 'canWrite'">
+                        <Checkbox
+                          :checked="record.canWrite"
+                          :disabled="record.systemField"
+                          @change="
+                            updateAuthFieldWrite(
+                              String(record.id),
+                              $event.target.checked,
+                            )
+                          "
+                        />
+                      </template>
+                    </template>
+                  </Table>
+                </Card>
+
+                <Card class="xl:col-span-4" size="small" title="行权限配置">
+                  <div class="mb-3 text-xs text-gray-500">
+                    这里填写共享给当前所选用户组的 SQL 条件脚本，建议仅编写 WHERE 条件表达式。
+                  </div>
+                  <Input.TextArea
+                    v-model:value="authRowFilterSql"
+                    :auto-size="{ minRows: 18, maxRows: 24 }"
+                    placeholder="例如：created_by = auth.uid() and status = 'published'"
+                    class="font-mono"
+                  />
+                </Card>
+              </div>
             </Tabs.TabPane>
 
             <Tabs.TabPane key="relationship" tab="模型关系">

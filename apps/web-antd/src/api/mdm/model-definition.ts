@@ -1,6 +1,6 @@
 import { requestClient } from '#/api/request';
-import { withRequestCache } from './_cache';
 
+import { withRequestCache } from './_cache';
 import { getNumberingSegmentListApi } from './numbering';
 import { getThemeListApi } from './theme';
 import { getUserGroupListApi } from './user-group';
@@ -198,6 +198,29 @@ async function fetchDefinitionSummaryMap(ids: string[]) {
   );
 }
 
+async function fetchUserNameMap(ids: string[]) {
+  if (ids.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const response = await requestClient.get<any>('/supabase-mdm/mdm_users', {
+    params: {
+      id: buildInFilter(ids),
+      limit: ids.length,
+      select: 'id,nickname,username',
+    },
+    responseReturn: 'raw',
+  });
+
+  const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+  return new Map(
+    rows.map((item: any) => [
+      String(item.id),
+      item.nickname || item.username || String(item.id),
+    ]),
+  );
+}
+
 async function resolveModelDefinitionLookups() {
   const [{ items: themes }, { items: userGroups }] = await Promise.all([
     getThemeListApi({ pageSize: 1000 }),
@@ -296,8 +319,24 @@ export async function getModelDefinitionListApi(params: any = {}) {
     );
 
     const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
+    const userIds = [
+      ...new Set<string>(
+        rawItems
+          .map((item: any) => (item.updated_by ? String(item.updated_by) : ''))
+          .filter(Boolean),
+      ),
+    ];
     const lookups = await resolveModelDefinitionLookups();
-    const items = rawItems.map((item: any) => mapModelDefinition(item, lookups));
+    const userNameMap = await fetchUserNameMap(userIds);
+    const items = rawItems.map((item: any) => {
+      const mapped = mapModelDefinition(item, lookups);
+      return {
+        ...mapped,
+        updatedBy: mapped.updatedBy
+          ? (userNameMap.get(String(mapped.updatedBy)) ?? String(mapped.updatedBy))
+          : '',
+      };
+    });
 
     return {
       items,

@@ -1,114 +1,108 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
-import { Page, useVbenModal } from '@vben/common-ui';
-import { Button, message, Space, Tag, Modal, Table } from 'ant-design-vue';
+
+import { useRouter } from 'vue-router';
+
+import { Page } from '@vben/common-ui';
+
+import { Button, Space, Tag } from 'ant-design-vue';
+
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { h, ref } from 'vue';
+import { getModelDefinitionListApi } from '#/api/mdm/model-definition';
+
 import { useColumns } from './data';
 
-const MOCK_VERSIONS = [
-  {
-    id: '1',
-    modelName: '客户主体 (CUSTOMER)',
-    version: 'V1.0.2',
-    status: 'active',
-    publishTime: '2024-03-25 10:00:00',
-    publisher: 'Admin',
-    remark: '新增重量与图片属性字段',
-  },
-  {
-    id: '2',
-    modelName: '客户主体 (CUSTOMER)',
-    version: 'V1.0.1',
-    status: 'deprecated',
-    publishTime: '2024-03-10 09:12:00',
-    publisher: '张先生',
-    remark: '基础字段定义',
-  },
-  {
-    id: '3',
-    modelName: '物料主数据 (MATERIAL)',
-    version: 'V2.1.0',
-    status: 'active',
-    publishTime: '2024-03-28 14:00:00',
-    publisher: 'Admin',
-    remark: '主数据结构大型变更，支持多单位引用',
-  },
-];
+defineOptions({ name: 'MdmModelVersion' });
+
+const router = useRouter();
+
+const STATUS_MAP: Record<string, { color: string; label: string }> = {
+  history: { color: 'default', label: '历史' },
+  invalid: { color: 'default', label: '失效' },
+  published: { color: 'success', label: '已生效' },
+};
+
+function formatVersionLabel(versionNo?: number | string) {
+  if (versionNo === null || versionNo === undefined || versionNo === '') {
+    return '-';
+  }
+  return `V${versionNo}`;
+}
 
 const gridOptions: VxeGridProps<any> = {
   columns: useColumns(),
-  data: MOCK_VERSIONS,
   height: 'auto',
+  pagerConfig: {
+    enabled: true,
+    pageSize: 10,
+  },
+  proxyConfig: {
+    ajax: {
+      query: async ({ page }) => {
+        const result = await getModelDefinitionListApi({
+          includeHistory: true,
+          order: 'updated_at.desc,created_at.desc',
+          page: page.currentPage,
+          pageSize: page.pageSize,
+          status: 'in.(history,invalid,published)',
+        });
+
+        return {
+          items: result.items.map((item) => ({
+            ...item,
+            modelName: item.code ? `${item.name} (${item.code})` : item.name,
+            publisher: item.updatedBy || '-',
+            publishTime: item.updatedAt,
+            remark: item.remark || item.description || '-',
+            statusLabel: STATUS_MAP[item.status]?.label || item.status,
+            version: formatVersionLabel(item.versionNo),
+          })),
+          total: result.total,
+        };
+      },
+    },
+  },
+  toolbarConfig: {
+    custom: true,
+    refresh: true,
+    zoom: true,
+  },
 };
 
 const [Grid] = useVbenVxeGrid({
   gridOptions,
 });
 
-function handleCompare(row: any) {
-  message.info(`正在生成版本比对报告: ${row.version}`);
-}
-
-function handleRollback(row: any) {
-  Modal.confirm({
-    title: '确认回滚版本？',
-    content: `系统将根据版本 [${row.version}] 还原模型定义，当前生效版本将变为废弃状态。`,
-    onOk() {
-      message.loading('正在重构底层数据结构...', 1.5).then(() => {
-        message.success(`模型已成功回滚至版本: ${row.version}`);
-      });
-    },
-  });
-}
-
 function handleViewDefinition(row: any) {
-  message.info(`查看 [${row.version}] 的快照定义`);
+  router.push({
+    name: 'MdmModelDefinitionManage',
+    params: { id: row.id },
+  });
 }
 </script>
 
 <template>
   <Page
     auto-content-height
-    description="管理主数据模型的全生命周期版本。支持版本比对、旧版本回滚及其历史修订记录的追溯，确保模型变更的可控性。"
+    description="从数据模型库读取已生效、失效和历史版本，统一查看模型版本状态与发布时间。"
     title="模型版本管理"
   >
-    <template #extra>
-      <Space>
-        <Button @click="() => message.info('版本导出')"> 批量导出 </Button>
-        <Button type="primary" @click="() => message.info('模型快照')">
-          保存当前快照
-        </Button>
-      </Space>
-    </template>
-
-    <Grid table-title="版本列表">
+    <Grid table-title="模型版本列表">
       <template #version="{ row }">
         <Tag color="blue">{{ row.version }}</Tag>
       </template>
 
       <template #status="{ row }">
-        <Tag :color="row.status === 'active' ? 'success' : 'default'">
-          {{ row.status === 'active' ? '当前生效' : '历史快照' }}
+        <Tag :color="STATUS_MAP[row.status]?.color">
+          {{ STATUS_MAP[row.status]?.label || row.statusLabel }}
         </Tag>
       </template>
 
       <template #action="{ row }">
         <Space>
-          <Button size="small" type="link" @click="handleCompare(row)"
-            >比对</Button
-          >
-          <Button size="small" type="link" @click="handleViewDefinition(row)"
-            >详情</Button
-          >
-          <Button
-            v-if="row.status !== 'active'"
-            size="small"
-            type="link"
-            danger
-            @click="handleRollback(row)"
-            >回滚</Button
-          >
+          <Button size="small" type="link" @click="handleViewDefinition(row)">
+            查看模型
+          </Button>
         </Space>
       </template>
     </Grid>
