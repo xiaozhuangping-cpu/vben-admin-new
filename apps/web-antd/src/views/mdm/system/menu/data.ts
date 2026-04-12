@@ -64,7 +64,7 @@ export function useSchema(
       fieldName: 'component',
       label: '组件路径',
       component: 'Select',
-      help: '选择项目中的 Vue 组件，将自动带出路由和标识',
+      help: '支持按标题和路由路径搜索，选择后将自动带出路由和标识',
       colProps: { span: 24 },
       componentProps: {
         options: [

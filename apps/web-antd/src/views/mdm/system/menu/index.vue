@@ -11,16 +11,21 @@ import {
   Tree,
   Input,
   Empty,
-  Typography,
   Tooltip,
   Tag,
 } from 'ant-design-vue';
 import { IconifyIcon } from '@vben/icons';
 import { ref, onMounted, computed } from 'vue';
+import {
+  getAllMasterDataItems,
+  loadDynamicMasterDataItems,
+} from '#/views/mdm/data/shared/master-data';
 import { processRawModules } from '#/utils/route-scanner';
 import { 
+  createMenuApi,
   getMenuListApi, 
-  deleteMenuApi 
+  deleteMenuApi,
+  updateMenuApi,
 } from '#/api/mdm/rbac-menu';
 import FormModule from './modules/form.vue';
 
@@ -31,13 +36,22 @@ const selectedKeys = ref<string[]>([]);
 const searchValue = ref('');
 const currentData = ref<any>(null);
 const loading = ref(false);
+const sortSaving = ref(false);
+const syncingDynamicMenus = ref(false);
 
 const pageMap = import.meta.glob('/src/views/**/*.vue');
 const allRouteCandidates = processRawModules(pageMap);
 const componentOptions = allRouteCandidates.map((c) => ({
-  label: c.relative,
+  label: `${c.title} | ${c.path}`,
   value: c.component,
 }));
+
+function isAutoManagedMenu(item: any) {
+  return (
+    String(item?.name || '') === 'MdmDataMaintenance' ||
+    String(item?.name || '').startsWith('MdmDataDynamic')
+  );
+}
 
 function buildTree(list: any[], parentId: string | null = null): any[] {
   const children = list.filter((item) => {
@@ -50,6 +64,7 @@ function buildTree(list: any[], parentId: string | null = null): any[] {
   return children
     .map((item) => ({
       ...item,
+      autoManaged: isAutoManagedMenu(item),
       key: item.id,
       title: item.title,
       children: buildTree(list, item.id),
@@ -58,18 +73,236 @@ function buildTree(list: any[], parentId: string | null = null): any[] {
     .sort((a, b) => (a.order_no || 0) - (b.order_no || 0));
 }
 
+function cloneTree(nodes: any[]): any[] {
+  return nodes.map((node) => ({
+    ...node,
+    children: cloneTree(node.children || []),
+  }));
+}
+
+function removeNodeById(nodes: any[], id: string): any | null {
+  for (const [index, node] of nodes.entries()) {
+    if (node.id === id) {
+      const [removed] = nodes.splice(index, 1);
+      return removed;
+    }
+    const removed = removeNodeById(node.children || [], id);
+    if (removed) {
+      return removed;
+    }
+  }
+  return null;
+}
+
+function findNodeById(nodes: any[], id: string): any | null {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node;
+    }
+    const found = findNodeById(node.children || [], id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function appendChildNode(targetNode: any, childNode: any, insertAtTop = false) {
+  targetNode.children ||= [];
+  if (insertAtTop) {
+    targetNode.children.unshift(childNode);
+  } else {
+    targetNode.children.push(childNode);
+  }
+}
+
+function findParentChildren(
+  nodes: any[],
+  id: string,
+): { index: number; siblings: any[] } | null {
+  for (const [index, node] of nodes.entries()) {
+    if (node.id === id) {
+      return { index, siblings: nodes };
+    }
+    const found = findParentChildren(node.children || [], id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function containsDescendant(nodes: any[], id: string): boolean {
+  return nodes.some(
+    (node) => node.id === id || containsDescendant(node.children || [], id),
+  );
+}
+
+function normalizeTree(nodes: any[], parentId: string | null = null): any[] {
+  return nodes.map((node, index) => {
+    const children = normalizeTree(node.children || [], node.id);
+    return {
+      ...node,
+      children,
+      isLeaf: children.length === 0,
+      order_no: (index + 1) * 10,
+      parent_id: parentId,
+    };
+  });
+}
+
+function flattenTree(nodes: any[]): any[] {
+  return nodes.flatMap((node) => [node, ...flattenTree(node.children || [])]);
+}
+
+async function syncDynamicMaintenanceMenus(existingMenus: any[]) {
+  await loadDynamicMasterDataItems(true);
+  const dynamicItems = getAllMasterDataItems().filter((item) => item.dynamic);
+  if (dynamicItems.length === 0) {
+    return false;
+  }
+
+  let maintenanceRoot =
+    existingMenus.find((item) => item.name === 'MdmDataMaintenance') ||
+    existingMenus.find(
+      (item) =>
+        item.parent_id === null &&
+        item.path === '/mdm/data' &&
+        ['MdmData', 'MdmDataMaintenance'].includes(String(item.name || '')),
+    ) ||
+    existingMenus.find(
+      (item) => item.parent_id === null && item.title === '主数据维护',
+    );
+
+  if (!maintenanceRoot) {
+    syncingDynamicMenus.value = true;
+    try {
+      await createMenuApi({
+        component: 'BasicLayout',
+        hide_menu: false,
+        icon: 'lucide:database-zap',
+        keep_alive: false,
+        name: 'MdmDataMaintenance',
+        order_no: 110,
+        parent_id: null,
+        path: '/mdm/data',
+        status: true,
+        title: '主数据维护',
+      });
+    } finally {
+      syncingDynamicMenus.value = false;
+    }
+    return true;
+  }
+
+  const maintenanceRootId = String(maintenanceRoot.id || '');
+  if (!maintenanceRootId) {
+    return false;
+  }
+
+  const tasks: Promise<any>[] = [];
+  const shouldUpdateRoot =
+    maintenanceRoot.name !== 'MdmDataMaintenance' ||
+    maintenanceRoot.title !== '主数据维护' ||
+    maintenanceRoot.path !== '/mdm/data' ||
+    maintenanceRoot.parent_id !== null ||
+    maintenanceRoot.component !== 'BasicLayout';
+
+  if (shouldUpdateRoot) {
+    tasks.push(
+      updateMenuApi(maintenanceRootId, {
+        component: 'BasicLayout',
+        icon: maintenanceRoot.icon || 'lucide:database-zap',
+        keep_alive: false,
+        name: 'MdmDataMaintenance',
+        parent_id: null,
+        path: '/mdm/data',
+        status: true,
+        title: '主数据维护',
+      }),
+    );
+  }
+
+  const existingMap = new Map(
+    existingMenus.map((item) => [String(item.name || ''), item]),
+  );
+  const siblingMenus = existingMenus
+    .filter((item) => item.parent_id === maintenanceRootId)
+    .sort((a, b) => (a.order_no || 0) - (b.order_no || 0));
+  let nextOrder =
+    siblingMenus.reduce((max, item) => Math.max(max, item.order_no || 0), 0) ||
+    0;
+
+  for (const item of dynamicItems) {
+    const existing = existingMap.get(item.routeName);
+    if (existing) {
+      const shouldUpdate =
+        existing.title !== item.title ||
+        existing.path !== item.path ||
+        existing.parent_id !== maintenanceRootId ||
+        existing.component !== 'mdm/data/maintenance/index.vue' ||
+        existing.keep_alive !== true ||
+        existing.status !== true;
+
+      if (shouldUpdate) {
+        tasks.push(
+          updateMenuApi(String(existing.id), {
+            component: 'mdm/data/maintenance/index.vue',
+            keep_alive: true,
+            parent_id: maintenanceRootId,
+            path: item.path,
+            status: true,
+            title: item.title,
+          }),
+        );
+      }
+      continue;
+    }
+
+    nextOrder += 10;
+    tasks.push(
+      createMenuApi({
+        component: 'mdm/data/maintenance/index.vue',
+        hide_menu: false,
+        keep_alive: true,
+        name: item.routeName,
+        order_no: nextOrder,
+        parent_id: maintenanceRootId,
+        path: item.path,
+        status: true,
+        title: item.title,
+      }),
+    );
+  }
+
+  if (tasks.length === 0) {
+    return false;
+  }
+
+  syncingDynamicMenus.value = true;
+  try {
+    await Promise.all(tasks);
+    return true;
+  } finally {
+    syncingDynamicMenus.value = false;
+  }
+}
+
 async function fetchList() {
   try {
     loading.value = true;
-    const resp = await getMenuListApi();
-    const items = Array.isArray(resp)
-      ? resp
-      : Array.isArray(resp?.data)
-        ? resp.data
-        : [];
+    let resp = await getMenuListApi();
+    if (Array.isArray(resp) && (await syncDynamicMaintenanceMenus(resp))) {
+      resp = await getMenuListApi();
+    }
+    const items = Array.isArray(resp) ? resp : [];
 
     allMenus.value = items;
     treeData.value = buildTree(allMenus.value);
+    if (currentData.value?.id) {
+      currentData.value =
+        allMenus.value.find((item) => item.id === currentData.value.id) ?? null;
+    }
     
     if (expandedKeys.value.length === 0) {
       expandedKeys.value = allMenus.value.map((i) => i.id);
@@ -94,15 +327,20 @@ function handleSelect(keys: any[], info: any) {
 }
 
 function handleAddChild() {
-  if (!selectedKeys.value.length) {
+  const parentId = selectedKeys.value[0];
+  if (!parentId) {
     message.warning('请先在左侧选择一个父级菜单');
     return;
   }
+  if (currentData.value?.autoManaged) {
+    message.warning('动态主数据菜单仅支持排序，不支持新增子节点。');
+    return;
+  }
   currentData.value = { 
-    parent_id: selectedKeys.value[0],
+    parent_id: parentId,
     status: true,
     keep_alive: true,
-    order_no: (allMenus.value.filter(m => m.parent_id === selectedKeys.value[0]).length + 1) * 10
+    order_no: (allMenus.value.filter(m => m.parent_id === parentId).length + 1) * 10
   };
 }
 
@@ -117,8 +355,12 @@ function handleAddRoot() {
 }
 
 async function handleDelete() {
-  if (!selectedKeys.value.length) return;
   const menuId = selectedKeys.value[0];
+  if (!menuId) return;
+  if (currentData.value?.autoManaged) {
+    message.warning('动态主数据菜单由系统自动维护，可拖拽排序但不支持删除。');
+    return;
+  }
 
   Modal.confirm({
     title: '确认删除？',
@@ -146,6 +388,104 @@ function handleFormCancel() {
   selectedKeys.value = [];
 }
 
+async function handleDrop(info: any) {
+  if (searchValue.value || loading.value || sortSaving.value) {
+    message.warning('当前状态下暂不支持拖拽，请稍后再试。');
+    return;
+  }
+
+  const dragId = String(info?.dragNode?.id || info?.dragNode?.key || '');
+  const dropId = String(info?.node?.id || info?.node?.key || '');
+  if (!dragId || !dropId || dragId === dropId) {
+    return;
+  }
+
+  const draftTree = cloneTree(treeData.value);
+  const draggedNode = removeNodeById(draftTree, dragId);
+  if (!draggedNode) {
+    return;
+  }
+
+  if (containsDescendant(draggedNode.children || [], dropId)) {
+    message.warning('不能把节点拖动到自己的下级菜单中。');
+    return;
+  }
+
+  if (!info.dropToGap) {
+    const targetNode = findNodeById(draftTree, dropId);
+    if (!targetNode) {
+      return;
+    }
+    appendChildNode(targetNode, draggedNode);
+    expandedKeys.value = [...new Set([...expandedKeys.value, dropId])];
+  } else {
+    const targetNode = findNodeById(draftTree, dropId);
+    const targetHasChildren = (targetNode?.children?.length ?? 0) > 0;
+    const dropPosList = String(info?.node?.pos || '').split('-');
+    const relativeDropPosition =
+      info.dropPosition - Number(dropPosList.at(-1) || 0);
+
+    if (
+      targetNode &&
+      targetHasChildren &&
+      info?.node?.expanded &&
+      relativeDropPosition === 1
+    ) {
+      appendChildNode(targetNode, draggedNode, true);
+      expandedKeys.value = [...new Set([...expandedKeys.value, dropId])];
+    } else {
+      const target = findParentChildren(draftTree, dropId);
+      if (!target) {
+        return;
+      }
+      const insertIndex =
+        relativeDropPosition > 0 ? target.index + 1 : target.index;
+      target.siblings.splice(insertIndex, 0, draggedNode);
+    }
+  }
+
+  const normalizedTree = normalizeTree(draftTree);
+  const nextMenus = flattenTree(normalizedTree);
+  const previousMap = new Map(
+    allMenus.value.map((item) => [
+      item.id,
+      {
+        order_no: item.order_no ?? 0,
+        parent_id: item.parent_id ?? null,
+      },
+    ]),
+  );
+  const changedMenus = nextMenus.filter((item) => {
+    const previous = previousMap.get(item.id);
+    return (
+      (previous?.parent_id ?? null) !== (item.parent_id ?? null) ||
+      (previous?.order_no ?? 0) !== (item.order_no ?? 0)
+    );
+  });
+
+  if (changedMenus.length === 0) {
+    return;
+  }
+
+  try {
+    sortSaving.value = true;
+    for (const item of changedMenus) {
+      await updateMenuApi(String(item.id), {
+        order_no: item.order_no,
+        parent_id: item.parent_id,
+      });
+    }
+    await fetchList();
+    message.success('菜单排序已更新');
+  } catch (error) {
+    console.error(error);
+    message.error('菜单排序保存失败');
+    await fetchList();
+  } finally {
+    sortSaving.value = false;
+  }
+}
+
 const filteredTreeData = computed(() => {
   if (!searchValue.value) return treeData.value;
   const filter = (nodes: any[]): any[] => {
@@ -168,7 +508,7 @@ const filteredTreeData = computed(() => {
   <Page
     auto-content-height
     content-class="p-4 bg-background-deep flex flex-col"
-    description="通过左侧树形结构管理菜单层级。点击节点进行编辑，支持自动识别项目组件路径并生成路由配置。"
+    description="通过左侧树形结构管理菜单层级。支持拖拽排序、调整父子关系，并自动识别项目组件路径生成路由配置。"
     title="导航菜单维护"
   >
     <template #extra>
@@ -221,9 +561,11 @@ const filteredTreeData = computed(() => {
                 v-if="treeData.length"
                 v-model:expanded-keys="expandedKeys"
                 v-model:selected-keys="selectedKeys"
+                :draggable="!searchValue && !sortSaving"
                 :tree-data="filteredTreeData"
                 block-node
                 class="menu-tree"
+                @drop="handleDrop"
                 @select="handleSelect"
               >
                 <template #title="{ title, dataRef, selected }">
@@ -240,12 +582,18 @@ const filteredTreeData = computed(() => {
                         />
                         <IconifyIcon v-else icon="lucide:file-code-2" size="16" />
                       </div>
+                      <IconifyIcon
+                        icon="lucide:grip-vertical"
+                        class="text-gray-300"
+                        size="14"
+                      />
                       <span :class="{ 'font-semibold text-primary': selected, 'text-foreground': !selected }" class="truncate">
                         {{ title }}
                       </span>
                     </div>
                     <div class="flex items-center gap-1">
                       <IconifyIcon 
+                        v-if="!dataRef.autoManaged"
                         icon="lucide:plus" 
                         class="text-gray-300 hover:text-primary transition-colors cursor-pointer opacity-0 group-hover/item:opacity-100" 
                         @click.stop="() => { selectedKeys = [dataRef.id]; currentData = dataRef; handleAddChild(); }"
@@ -260,15 +608,30 @@ const filteredTreeData = computed(() => {
                 <div class="text-gray-400 mt-2 text-sm">数据同步中...</div>
               </div>
             </div>
+            <div class="mt-3 px-1 text-xs text-gray-400">
+              {{
+                searchValue
+                  ? '搜索中已关闭拖拽排序，请先清空搜索条件。'
+                  : sortSaving
+                    ? '正在保存拖拽结果...'
+                    : syncingDynamicMenus
+                      ? '正在同步动态主数据菜单...'
+                      : '可直接拖动节点调整顺序和层级。'
+              }}
+            </div>
           </div>
 
           <div class="pt-4 mt-auto">
-            <Button block type="dashed" class="rounded-xl h-10 border-primary/30 text-primary hover:bg-accent hover:border-primary/50" @click="handleAddChild" :disabled="!selectedKeys.length">
+            <Button block type="dashed" class="rounded-xl h-10 border-primary/30 text-primary hover:bg-accent hover:border-primary/50" @click="handleAddChild" :disabled="!selectedKeys.length || currentData?.autoManaged">
               <template #icon><IconifyIcon icon="lucide:plus" /></template> 在选中项下新增子节点
             </Button>
-            <div v-if="!selectedKeys.length" class="text-center text-[10px] text-gray-400 mt-2">
+            <div v-if="!selectedKeys.length || currentData?.autoManaged" class="text-center text-[10px] text-gray-400 mt-2">
               <IconifyIcon icon="lucide:info" size="12" class="inline mr-1" />
-              请先在上方树中选择一个目标节点
+              {{
+                currentData?.autoManaged
+                  ? '动态主数据菜单仅支持排序，不支持新增子节点。'
+                  : '请先在上方树中选择一个目标节点'
+              }}
             </div>
           </div>
         </Card>

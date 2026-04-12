@@ -49,13 +49,14 @@ export async function mergeDynamicMdmDataMenus(
 ) {
   await loadDynamicMasterDataItems();
   const dynamicChildren = getDynamicMasterDataChildrenRoutes().map((route) => ({
+    component: 'mdm/data/maintenance/index.vue',
     meta: route.meta,
     name: route.name,
     path: toAbsoluteMdmDataPath(String(route.path)),
   }));
 
   return menus.map((menu) => {
-    if (menu.name !== 'MdmData') {
+    if (!['MdmData', 'MdmDataMaintenance'].includes(String(menu.name || ''))) {
       return menu;
     }
 

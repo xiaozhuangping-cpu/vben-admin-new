@@ -11,6 +11,8 @@ import { getAllMenusApi } from '#/api';
 import { BasicLayout, IFrameView } from '#/layouts';
 import { $t } from '#/locales';
 
+import { mergeDynamicMdmDataMenus } from './dynamic-mdm-data';
+
 const forbiddenComponent = () => import('#/views/_core/fallback/forbidden.vue');
 
 async function generateAccess(options: GenerateMenuAndRoutesOptions) {
@@ -56,7 +58,8 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
           });
       };
 
-      const treeMenus = listToTree(menuList);
+      let treeMenus = listToTree(menuList);
+      treeMenus = await mergeDynamicMdmDataMenus(treeMenus);
       return treeMenus;
     },
     // 可以指定没有权限跳转403页面

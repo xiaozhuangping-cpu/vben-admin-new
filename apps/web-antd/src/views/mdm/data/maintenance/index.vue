@@ -113,7 +113,16 @@ const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions,
 });
 
+function isInMasterDataRoute() {
+  return route.path.startsWith('/mdm/data');
+}
+
 async function resolveCurrentMasterData() {
+  if (!isInMasterDataRoute()) {
+    currentMasterData.value = null;
+    return;
+  }
+
   await loadDynamicMasterDataItems();
   selectOptions.value = getMasterDataSelectOptions();
   currentMasterData.value = getMasterDataItemByRouteName(
@@ -222,7 +231,7 @@ function refreshGrid() {
 }
 
 watch(
-  () => route.name,
+  () => route.path,
   () => {
     resolveCurrentMasterData();
   },

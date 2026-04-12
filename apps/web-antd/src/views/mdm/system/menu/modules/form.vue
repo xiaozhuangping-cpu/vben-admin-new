@@ -18,6 +18,13 @@ const emit = defineEmits(['success', 'cancel']);
 
 const loading = ref(false);
 
+function normalizeMenuFormValues(values: Record<string, any> = {}) {
+  return {
+    ...values,
+    parent_id: values.parent_id ?? null,
+  };
+}
+
 function applyRouteSuggestion(component?: string) {
   if (!component || component === 'BasicLayout') {
     return;
@@ -34,7 +41,7 @@ function applyRouteSuggestion(component?: string) {
     return;
   }
 
-  const values = formApi.getValues();
+  const values = formApi.getValues() as Record<string, any>;
   const isNew = !props.currentData?.id;
 
   formApi.setValues({
@@ -58,7 +65,8 @@ watch(
   () => props.currentData,
   (val) => {
     if (val) {
-      formApi.setValues(val);
+      formApi.resetForm();
+      formApi.setValues(normalizeMenuFormValues(val));
       if (val.component) {
         applyRouteSuggestion(val.component);
       }
@@ -93,11 +101,12 @@ watch(
 async function onSubmit(values: any) {
   try {
     loading.value = true;
+    const payload = normalizeMenuFormValues(values);
     if (props.currentData?.id) {
-      await updateMenuApi(props.currentData.id, values);
+      await updateMenuApi(props.currentData.id, payload);
       message.success('菜单配置已更新');
     } else {
-      await createMenuApi(values);
+      await createMenuApi(payload);
       message.success('新菜单创建成功');
     }
     formApi.resetForm();
@@ -135,7 +144,7 @@ function handleReset() {
     </template>
     
     <template #extra>
-      <Space v-if="currentData" :size="8">
+      <Space v-if="currentData && !currentData.autoManaged" :size="8">
         <Tooltip title="清空表单">
           <Button @click="handleReset" class="flex items-center justify-center">
             <template #icon><IconifyIcon icon="lucide:eraser" /></template>
@@ -156,6 +165,16 @@ function handleReset() {
       >
         <IconifyIcon icon="lucide:layout-template" class="text-4xl text-gray-200 mb-4" />
         <div class="text-sm px-12 text-center">点击左侧树节点或“新增顶级”来配置您的系统导航</div>
+      </div>
+      <div
+        v-else-if="currentData.autoManaged"
+        class="flex-1 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-100 bg-blue-50/50 text-blue-700 m-2"
+      >
+        <IconifyIcon icon="lucide:wand-sparkles" class="text-4xl text-blue-300 mb-4" />
+        <div class="text-base font-semibold">{{ currentData.title }}</div>
+        <div class="mt-2 max-w-md text-center text-sm leading-6 text-blue-700/80">
+          这是系统根据已发布数据定义自动生成的菜单项。这里不需要单独编辑，您可以直接在左侧拖拽调整它在菜单中的位置。
+        </div>
       </div>
       <div v-else class="flex-1 overflow-auto custom-scrollbar px-2">
         <div class="mb-6 flex items-start gap-3 px-4 py-3 bg-blue-50/60 border border-blue-100 rounded-xl text-blue-700 text-xs shadow-sm shadow-blue-500/5">
@@ -198,4 +217,3 @@ function handleReset() {
   background: transparent;
 }
 </style>
-

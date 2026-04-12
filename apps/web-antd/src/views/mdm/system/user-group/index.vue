@@ -19,6 +19,7 @@ const [Form, formModalApi] = useVbenModal({
 });
 
 const [AssignUsersDrawer, assignUsersDrawerApi] = useVbenDrawer({
+  class: 'w-180',
   connectedComponent: AssignUsersModal,
   destroyOnClose: true,
 });
