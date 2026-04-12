@@ -71,6 +71,9 @@ const compositeDrawerValues = ref<Record<string, any>>({});
 const submitting = ref(false);
 
 const modelId = computed(() => String(currentData.value?.definitionId || ''));
+const rootFieldPermissionMap = computed(
+  () => currentData.value?.dataAuth?.fieldPermissionMap ?? {},
+);
 const getTitle = computed(() => {
   const title = currentData.value?.masterDataTitle || '主数据';
   return currentData.value?.id ? `编辑${title}` : `新增${title}`;
@@ -137,6 +140,67 @@ function getStoredSchemaByModelId(targetModelId: string) {
 
 function renderPlaceholder(item: any) {
   return item.placeholder || `请输入${item.label}`;
+}
+
+function getRootFieldPermissionByFieldCode(fieldCode?: string) {
+  const field = (currentData.value?.fields || []).find(
+    (item: any) => normalizeKey(item.code) === normalizeKey(fieldCode),
+  );
+  if (!field?.id) {
+    return null;
+  }
+  return rootFieldPermissionMap.value[String(field.id)] ?? null;
+}
+
+function applyDataAuthToSchema(targetSchema: any) {
+  const patchItems = (items: any[]) =>
+    items.map((item: any) => {
+      if (item.component === 'CompositeModel') {
+        return item;
+      }
+
+      const permission = getRootFieldPermissionByFieldCode(item.fieldCode);
+      if (!permission) {
+        return item;
+      }
+
+      return {
+        ...item,
+        readonly: item.readonly || !permission.canWrite,
+        visible: item.visible !== false && permission.canRead,
+      };
+    });
+
+  return {
+    ...targetSchema,
+    sections: (targetSchema.sections || []).map((section: any) =>
+      section.layout === 'tabs'
+        ? {
+            ...section,
+            tabs: (section.tabs || []).map((tab: any) => ({
+              ...tab,
+              items: patchItems(tab.items || []),
+            })),
+          }
+        : {
+            ...section,
+            items: patchItems(section.items || []),
+          },
+    ),
+  };
+}
+
+function filterWritableRootPayload(payload: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => {
+      if (key === 'status') {
+        return true;
+      }
+
+      const permission = getRootFieldPermissionByFieldCode(key);
+      return !permission || permission.canWrite;
+    }),
+  );
 }
 
 function isAttachmentMultiple(item: any) {
@@ -320,7 +384,7 @@ function getCompositeTableColumns(item: any) {
 
 function getDisplayValue(value: any, field: any) {
   if (field?.component === 'Attachment') {
-    const list = Array.isArray(value) ? value : value ? [value] : [];
+    const list = Array.isArray(value) ? value : (value ? [value] : []);
     return list.length > 0 ? `${list.length} 个附件` : '-';
   }
   if (field?.component === 'Switch') return value ? '是' : '否';
@@ -346,9 +410,9 @@ function validateFields(
     const empty =
       item.component === 'Attachment'
         ? !Array.isArray(value) || value.length === 0
-        : item.component === 'Switch'
+        : (item.component === 'Switch'
           ? false
-          : value === undefined || value === null || value === '';
+          : value === undefined || value === null || value === '');
     if (empty) {
       message.warning(`${prefix}${item.label}不能为空`);
       return false;
@@ -605,10 +669,12 @@ async function loadDesignForm() {
       pageSize: 1000,
     });
     relationships.value = relationshipResponse.items;
-    schema.value = normalizeDesignerSchema(
-      currentData.value?.fields || [],
-      getStoredSchemaByModelId(modelId.value),
-      compositePaletteModels.value,
+    schema.value = applyDataAuthToSchema(
+      normalizeDesignerSchema(
+        currentData.value?.fields || [],
+        getStoredSchemaByModelId(modelId.value),
+        compositePaletteModels.value,
+      ),
     );
     await loadCompositeSchemas();
     await preloadDictOptions();
@@ -715,7 +781,9 @@ async function handleSubmit(mode: 'save' | 'submit') {
   modalApi.lock();
   try {
     const payload = {
-      ...serializePayload(formValues.value, (key) => getRootFieldMeta(key)),
+      ...filterWritableRootPayload(
+        serializePayload(formValues.value, (key) => getRootFieldMeta(key)),
+      ),
       status: resolveSubmitStatus(mode),
     };
     const saved = await (currentData.value?.id
@@ -789,9 +857,7 @@ const [Modal, modalApi] = useVbenModal({
                   <div class="space-y-2">
                     <div class="text-sm font-medium text-gray-700">
                       {{ item.label
-                      }}<span v-if="item.required" class="ml-1 text-red-500"
-                        >*</span
-                      >
+                      }}<span v-if="item.required" class="ml-1 text-red-500">*</span>
                     </div>
                     <div
                       v-if="item.component === 'CompositeModel'"
@@ -882,9 +948,7 @@ const [Modal, modalApi] = useVbenModal({
               <div class="space-y-2">
                 <div class="text-sm font-medium text-gray-700">
                   {{ item.label
-                  }}<span v-if="item.required" class="ml-1 text-red-500"
-                    >*</span
-                  >
+                  }}<span v-if="item.required" class="ml-1 text-red-500">*</span>
                 </div>
                 <template v-if="item.component === 'CompositeModel'">
                   <div
@@ -905,8 +969,9 @@ const [Modal, modalApi] = useVbenModal({
                           size="small"
                           type="primary"
                           @click="openCompositeDrawer(item)"
-                          >新增明细</Button
-                        >
+                          >
+新增明细
+</Button>
                       </div>
                       <Table
                         :columns="getCompositeTableColumns(item)"
@@ -918,9 +983,11 @@ const [Modal, modalApi] = useVbenModal({
                         size="small"
                       >
                         <template #bodyCell="{ column, record, index }">
-                          <template v-if="column.key === '__seq'">{{
+                          <template v-if="column.key === '__seq'">
+{{
                             Number(index) + 1
-                          }}</template>
+                          }}
+</template>
                           <template v-else-if="column.key === '__action'">
                             <Space size="small">
                               <Button
@@ -929,8 +996,9 @@ const [Modal, modalApi] = useVbenModal({
                                 @click="
                                   openCompositeDrawer(item, Number(index))
                                 "
-                                >编辑</Button
-                              >
+                                >
+编辑
+</Button>
                               <Button
                                 size="small"
                                 type="link"
@@ -941,11 +1009,13 @@ const [Modal, modalApi] = useVbenModal({
                                     Number(index),
                                   )
                                 "
-                                >删除</Button
-                              >
+                                >
+删除
+</Button>
                             </Space>
                           </template>
-                          <template v-else>{{
+                          <template v-else>
+{{
                             getDisplayValue(
                               record[String(column.dataIndex)],
                               getCompositeLeafFields(
@@ -956,7 +1026,8 @@ const [Modal, modalApi] = useVbenModal({
                                   column.dataIndex,
                               ),
                             )
-                          }}</template>
+                          }}
+</template>
                         </template>
                       </Table>
                     </template>
@@ -977,8 +1048,7 @@ const [Modal, modalApi] = useVbenModal({
                               }}<span
                                 v-if="childItem.required"
                                 class="ml-1 text-red-500"
-                                >*</span
-                              >
+                                >*</span>
                             </div>
                             <Input
                               v-if="childItem.component === 'Input'"
@@ -1138,9 +1208,11 @@ const [Modal, modalApi] = useVbenModal({
                                 )
                               "
                             >
-                              <Button>{{
+                              <Button>
+{{
                                 getAttachmentButtonText(childItem)
-                              }}</Button>
+                              }}
+</Button>
                             </Upload>
                             <Input
                               v-else
@@ -1366,15 +1438,16 @@ const [Modal, modalApi] = useVbenModal({
       </Drawer>
       <div class="mt-6 flex justify-end gap-2 border-t border-gray-200 pt-4">
         <Button :disabled="submitting" @click="modalApi.close()">取消</Button>
-        <Button :loading="submitting" @click="handleSubmit('save')"
-          >保存</Button
-        >
+        <Button :loading="submitting" @click="handleSubmit('save')">
+保存
+</Button>
         <Button
           :loading="submitting"
           type="primary"
           @click="handleSubmit('submit')"
-          >提交</Button
-        >
+          >
+提交
+</Button>
       </div>
     </div>
   </Modal>

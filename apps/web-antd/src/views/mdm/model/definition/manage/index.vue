@@ -504,7 +504,11 @@ function setSafeSessionStorage(key: string, value: unknown) {
 }
 
 function buildAuthFieldPermissionMap(
-  permissions: Array<{ canRead?: boolean; canWrite?: boolean; fieldId: string }>,
+  permissions: Array<{
+    canRead?: boolean;
+    canWrite?: boolean;
+    fieldId: string;
+  }>,
 ) {
   return Object.fromEntries(
     permissions
@@ -2110,12 +2114,12 @@ onMounted(async () => {
                                 </div>
                                 <div class="mt-2 flex flex-wrap gap-2 text-xs">
                                   <Tag>
-{{
-                                    getCompositeDisplayModeLabel(
-                                      item.displayMode,
-                                    )
-                                  }}
-</Tag>
+                                    {{
+                                      getCompositeDisplayModeLabel(
+                                        item.displayMode,
+                                      )
+                                    }}
+                                  </Tag>
                                   <Tag color="blue">子模型设计单独维护</Tag>
                                 </div>
                               </div>
@@ -2371,15 +2375,15 @@ onMounted(async () => {
                                         class="mt-2 flex flex-wrap gap-2 text-xs"
                                       >
                                         <Tag>
-{{
-                                          getCompositeDisplayModeLabel(
-                                            item.displayMode,
-                                          )
-                                        }}
-</Tag>
+                                          {{
+                                            getCompositeDisplayModeLabel(
+                                              item.displayMode,
+                                            )
+                                          }}
+                                        </Tag>
                                         <Tag color="blue">
-子模型设计单独维护
-</Tag>
+                                          子模型设计单独维护
+                                        </Tag>
                                       </div>
                                     </div>
                                     <Input
@@ -2802,7 +2806,11 @@ onMounted(async () => {
                   show-icon
                   type="info"
                 />
-                <Button :loading="authLoading" type="primary" @click="saveAuthConfig">
+                <Button
+                  :loading="authLoading"
+                  type="primary"
+                  @click="saveAuthConfig"
+                >
                   保存数据授权
                 </Button>
               </div>
@@ -2891,7 +2899,8 @@ onMounted(async () => {
 
                 <Card class="xl:col-span-4" size="small" title="行权限配置">
                   <div class="mb-3 text-xs text-gray-500">
-                    这里填写共享给当前所选用户组的 SQL 条件脚本，建议仅编写 WHERE 条件表达式。
+                    这里填写共享给当前所选用户组的 SQL 条件脚本，建议仅编写
+                    WHERE 条件表达式。
                   </div>
                   <Input.TextArea
                     v-model:value="authRowFilterSql"

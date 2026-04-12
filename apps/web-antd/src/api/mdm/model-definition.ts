@@ -318,7 +318,9 @@ export async function getModelDefinitionListApi(params: any = {}) {
       },
     );
 
-    const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
+    const rawItems = Array.isArray(response.data?.data)
+      ? response.data.data
+      : [];
     const userIds = [
       ...new Set<string>(
         rawItems
@@ -333,7 +335,8 @@ export async function getModelDefinitionListApi(params: any = {}) {
       return {
         ...mapped,
         updatedBy: mapped.updatedBy
-          ? (userNameMap.get(String(mapped.updatedBy)) ?? String(mapped.updatedBy))
+          ? (userNameMap.get(String(mapped.updatedBy)) ??
+            String(mapped.updatedBy))
           : '',
       };
     });

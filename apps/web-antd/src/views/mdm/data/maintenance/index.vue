@@ -1,16 +1,17 @@
 <script lang="ts" setup>
 import type { VxeGridProps } from '#/adapter/vxe-table';
 
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page, useVbenModal } from '@vben/common-ui';
 
-import { Button, message, Select, Space, Tag } from 'ant-design-vue';
+import { Alert, Button, message, Select, Space, Tag } from 'ant-design-vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { getDictItemOptionsApi } from '#/api/mdm/dict';
-import { getDynamicMasterDataRecordsApi } from '#/api/mdm/master-data';
+import { getAuthorizedDynamicMasterDataRecordsApi } from '#/api/mdm/master-data';
+import { getCurrentModelDataAuthApi } from '#/api/mdm/model-data-auth';
 import { getModelFieldListApi } from '#/api/mdm/model-definition';
 
 import {
@@ -43,9 +44,28 @@ function getStatusMeta(status?: string) {
 const route = useRoute();
 const router = useRouter();
 const currentMasterData = ref<any>(null);
+const currentDataAuth = ref<any>(null);
 const selectOptions = ref(getMasterDataSelectOptions());
 const currentFields = ref<any[]>([]);
 const currentDictOptionsMap = ref<Record<string, any[]>>({});
+const readableFields = computed(() => {
+  if (!currentMasterData.value?.dynamic) {
+    return currentFields.value;
+  }
+
+  if (!currentDataAuth.value?.hasConfig && !currentDataAuth.value?.isSuperAdmin) {
+    return currentFields.value;
+  }
+
+  return currentFields.value.filter((field: any) => {
+    const permission =
+      currentDataAuth.value?.fieldPermissionMap?.[String(field.id)];
+    return permission?.canRead;
+  });
+});
+const canMaintainCurrentData = computed(
+  () => !!currentDataAuth.value?.canCreate || !!currentDataAuth.value?.canEdit,
+);
 
 const [Form, formModalApi] = useVbenModal({
   connectedComponent: DataFormModal,
@@ -66,17 +86,25 @@ const gridOptions: VxeGridProps<any> = {
           currentMasterData.value.dynamic &&
           currentMasterData.value.tableName
         ) {
+          const definitionId = String(currentMasterData.value.definitionId || '');
           const fields = await getModelFieldListApi(
             currentMasterData.value.definitionId,
           );
           currentFields.value = fields;
-          currentDictOptionsMap.value = await loadDictOptionsMap(fields);
+          currentDataAuth.value = await getCurrentModelDataAuthApi(
+            definitionId,
+            fields.map((field: any) => String(field.id)).filter(Boolean),
+          );
+          currentDictOptionsMap.value = await loadDictOptionsMap(readableFields.value);
           gridApi.setGridOptions({
-            columns: buildDynamicColumns(fields, currentDictOptionsMap.value),
+            columns: buildDynamicColumns(
+              readableFields.value,
+              currentDictOptionsMap.value,
+            ),
           });
 
-          return await getDynamicMasterDataRecordsApi(
-            currentMasterData.value.tableName,
+          return await getAuthorizedDynamicMasterDataRecordsApi(
+            definitionId,
             {
               page: page.currentPage,
               pageSize: page.pageSize,
@@ -128,6 +156,7 @@ async function resolveCurrentMasterData() {
   currentMasterData.value = getMasterDataItemByRouteName(
     String(route.name ?? ''),
   );
+  currentDataAuth.value = null;
   currentFields.value = [];
   currentDictOptionsMap.value = {};
 
@@ -144,7 +173,11 @@ async function resolveCurrentMasterData() {
     currentFields.value = await getModelFieldListApi(
       currentMasterData.value.definitionId,
     );
-    currentDictOptionsMap.value = await loadDictOptionsMap(currentFields.value);
+    currentDataAuth.value = await getCurrentModelDataAuthApi(
+      String(currentMasterData.value.definitionId),
+      currentFields.value.map((field: any) => String(field.id)).filter(Boolean),
+    );
+    currentDictOptionsMap.value = await loadDictOptionsMap(readableFields.value);
   }
 
   gridApi.reload();
@@ -178,8 +211,13 @@ function handleCreate() {
     message.warning('请先发布数据模型后再维护主数据。');
     return;
   }
+  if (!canMaintainCurrentData.value) {
+    message.warning('当前用户没有该模型的数据写入权限');
+    return;
+  }
   formModalApi
     .setData({
+      dataAuth: currentDataAuth.value,
       definitionId: currentMasterData.value.definitionId,
       fields: currentFields.value,
       masterDataTitle: currentMasterData.value.title,
@@ -194,9 +232,14 @@ function handleEdit(row: any) {
   if (!currentMasterData.value?.tableName) {
     return;
   }
+  if (!currentDataAuth.value?.canEdit) {
+    message.warning('当前用户没有该模型的数据编辑权限');
+    return;
+  }
   formModalApi
     .setData({
       ...row,
+      dataAuth: currentDataAuth.value,
       definitionId: currentMasterData.value.definitionId,
       fields: currentFields.value,
       masterDataTitle: currentMasterData.value.title,
@@ -258,7 +301,7 @@ watch(
           @change="handleMasterDataChange"
         />
         <Button
-          :disabled="!currentMasterData"
+          :disabled="!currentMasterData || !canMaintainCurrentData"
           type="primary"
           @click="handleCreate"
         >
@@ -270,6 +313,17 @@ watch(
     <Form @success="refreshGrid" />
 
     <div v-if="currentMasterData" class="flex-1 min-h-0">
+      <Alert
+        v-if="
+          currentMasterData.dynamic &&
+          currentDataAuth?.hasConfig &&
+          !currentDataAuth?.authorized
+        "
+        class="mb-4"
+        message="当前用户所属用户组未被授权访问该模型数据，列表与编辑能力已按数据授权限制。"
+        show-icon
+        type="warning"
+      />
       <Grid
         :form-options="currentMasterData.dynamic ? undefined : formOptions"
         :table-title="`${currentMasterData.title}记录`"
@@ -282,7 +336,12 @@ watch(
 
         <template #action="{ row }">
           <Space>
-            <Button size="small" type="link" @click="handleEdit(row)">
+            <Button
+              v-if="canMaintainCurrentData"
+              size="small"
+              type="link"
+              @click="handleEdit(row)"
+            >
               编辑
             </Button>
             <Button size="small" type="link" @click="handleAudit(row)">

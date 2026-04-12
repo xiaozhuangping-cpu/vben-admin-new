@@ -34,6 +34,31 @@ export async function getDynamicMasterDataRecordsApi(
   };
 }
 
+export async function getAuthorizedDynamicMasterDataRecordsApi(
+  definitionId: string,
+  params: any = {},
+) {
+  const { page = 1, pageSize = 10, order, ...rest } = params;
+  const response = await requestClient.post<any>(
+    '/supabase-mdm/rpc/get_mdm_authorized_records',
+    {
+      p_definition_id: definitionId,
+      p_filters: rest,
+      p_order: order ?? 'updated_at.desc,created_at.desc',
+      p_page: page,
+      p_page_size: pageSize,
+    },
+    {
+      responseReturn: 'raw',
+    },
+  );
+
+  return {
+    items: Array.isArray(response.data?.items) ? response.data.items : [],
+    total: Number(response.data?.total ?? 0),
+  };
+}
+
 export async function createDynamicMasterDataRecordApi(
   tableName: string,
   data: Record<string, any>,
