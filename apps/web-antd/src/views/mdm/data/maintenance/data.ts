@@ -11,14 +11,54 @@ import { formatDateTime } from '#/utils/date';
 
 const STATUS_LABEL_MAP: Record<string, string> = {
   draft: '草稿',
-  history: '历史版本',
   invalid: '失效',
-  normal: '正常',
-  pending: '待审核',
-  published: '已发布',
-  rejected: '审核不通过',
-  revised: '已修订',
+  pending_approval: '待审批',
+  published: '已生效',
 };
+
+const STATUS_SEARCH_OPTIONS = [
+  { label: '草稿', value: 'draft' },
+  { label: '待审批', value: 'pending_approval' },
+  { label: '已生效', value: 'published' },
+  { label: '失效', value: 'invalid' },
+];
+
+const DEFAULT_HIDDEN_FIELD_CODES = new Set(['created_by', 'id', 'updated_by']);
+
+function normalizeFieldCode(code?: string) {
+  return String(code ?? '').toLowerCase();
+}
+
+function isRenderableDynamicField(field: ModelField) {
+  const fieldCode = normalizeFieldCode(field.code);
+  return (
+    field.status !== false &&
+    !DEFAULT_HIDDEN_FIELD_CODES.has(fieldCode) &&
+    !['created_at', 'updated_at'].includes(fieldCode) &&
+    field.dataType !== 'attachment'
+  );
+}
+
+function isListVisibleField(field: ModelField) {
+  return isRenderableDynamicField(field) && field.listVisible === true;
+}
+
+function isSearchableField(field: ModelField) {
+  return (
+    field.status !== false &&
+    field.searchable === true &&
+    field.dataType !== 'attachment' &&
+    field.dataType !== 'relation_master'
+  );
+}
+
+function getFieldPlaceholder(name: string, action = '请输入') {
+  return `${action}${name}`;
+}
+
+function createDateTimeFormatter() {
+  return ({ cellValue }: { cellValue?: string }) => formatDateTime(cellValue);
+}
 
 export const useColumns = (
   routeName?: string,
@@ -34,7 +74,6 @@ export const useColumns = (
       { field: 'platform', title: '所属平台', width: 120 },
       { field: 'authCode', title: '授权码', width: 120 },
       { field: 'authToken', title: '授权令牌', width: 140 },
-      { field: 'authExpiry', title: '授权过期时间', width: 160 },
       { field: 'merchantId', title: '商家编号', width: 120 },
       { field: 'contact', title: '联系人', width: 100 },
       { field: 'mobile', title: '手机', width: 120 },
@@ -49,7 +88,18 @@ export const useColumns = (
         width: 100,
       },
       { field: 'createBy', title: '创建人', width: 100 },
-      { field: 'createTime', title: '创建时间', width: 160 },
+      {
+        field: 'authExpiry',
+        formatter: createDateTimeFormatter(),
+        title: '授权过期时间',
+        width: 160,
+      },
+      {
+        field: 'createTime',
+        formatter: createDateTimeFormatter(),
+        title: '创建时间',
+        width: 160,
+      },
       {
         fixed: 'right',
         slots: { default: 'action' },
@@ -71,7 +121,12 @@ export const useColumns = (
       width: 100,
     },
     { field: 'createBy', title: '创建人', width: 100 },
-    { field: 'createTime', title: '创建时间', width: 160 },
+    {
+      field: 'createTime',
+      formatter: createDateTimeFormatter(),
+      title: '创建时间',
+      width: 160,
+    },
     {
       fixed: 'right',
       slots: { default: 'action' },
@@ -85,21 +140,20 @@ export const buildDynamicColumns = (
   fields: ModelField[],
   dictOptionsMap: Record<string, Array<{ label: string; value: string }>> = {},
 ): VxeGridProps<any>['columns'] => {
-  const hiddenFieldCodes = new Set(['created_by', 'id', 'updated_by']);
   const mapped = fields
-    .filter((field) => field.status !== false)
-    .filter((field) => !hiddenFieldCodes.has(field.code.toLowerCase()))
-    .filter(
-      (field) =>
-        !['created_at', 'updated_at'].includes(field.code.toLowerCase()),
-    )
-    .filter((field) => field.dataType !== 'attachment')
+    .filter((field) => isListVisibleField(field))
+    .toSorted((a, b) => Number(a.sort ?? 10) - Number(b.sort ?? 10))
     .map((field) => {
-      const fieldCode = field.code.toLowerCase();
+      const fieldCode = normalizeFieldCode(field.code);
       const dictOptions = field.dictCode
         ? (dictOptionsMap[field.dictCode] ?? [])
         : [];
-      let formatter: ((params: { cellValue?: string }) => string) | undefined;
+      let formatter:
+        | ((params: {
+            cellValue?: string;
+            row?: Record<string, any>;
+          }) => string)
+        | undefined;
 
       if (fieldCode === 'status') {
         formatter = ({ cellValue }: { cellValue?: string }) => {
@@ -114,7 +168,12 @@ export const buildDynamicColumns = (
           return STATUS_LABEL_MAP[String(cellValue)] ?? String(cellValue);
         };
       } else if (field.dataType === 'dict') {
-        formatter = ({ cellValue }: { cellValue?: string }) => {
+        formatter = ({
+          cellValue,
+        }: {
+          cellValue?: string;
+          row?: Record<string, any>;
+        }) => {
           if (
             cellValue === null ||
             cellValue === undefined ||
@@ -128,9 +187,38 @@ export const buildDynamicColumns = (
               ?.label ?? String(cellValue)
           );
         };
+      } else if (field.dataType === 'relation_master') {
+        formatter = ({
+          cellValue,
+          row,
+        }: {
+          cellValue?: string;
+          row?: Record<string, any>;
+        }) => {
+          const displayValue = row?.[`${fieldCode}__display`];
+          if (
+            displayValue !== null &&
+            displayValue !== undefined &&
+            displayValue !== ''
+          ) {
+            return String(displayValue);
+          }
+          if (
+            cellValue === null ||
+            cellValue === undefined ||
+            cellValue === ''
+          ) {
+            return '-';
+          }
+          return String(cellValue);
+        };
       } else if (['date', 'timestamptz'].includes(field.dataType)) {
-        formatter = ({ cellValue }: { cellValue?: string }) =>
-          formatDateTime(cellValue);
+        formatter = ({
+          cellValue,
+        }: {
+          cellValue?: string;
+          row?: Record<string, any>;
+        }) => formatDateTime(cellValue);
       }
 
       return {
@@ -144,8 +232,18 @@ export const buildDynamicColumns = (
   return [
     { title: '序号', type: 'seq', width: 60 },
     ...mapped,
-    { field: 'created_at', title: '创建时间', width: 180 },
-    { field: 'updated_at', title: '更新时间', width: 180 },
+    {
+      field: 'created_at',
+      formatter: createDateTimeFormatter(),
+      title: '创建时间',
+      width: 180,
+    },
+    {
+      field: 'updated_at',
+      formatter: createDateTimeFormatter(),
+      title: '更新时间',
+      width: 180,
+    },
     {
       fixed: 'right',
       slots: { default: 'action' },
@@ -154,6 +252,152 @@ export const buildDynamicColumns = (
     },
   ];
 };
+
+export function getDynamicSearchFields(fields: ModelField[]) {
+  return fields
+    .filter((field) => isSearchableField(field))
+    .toSorted((a, b) => Number(a.sort ?? 10) - Number(b.sort ?? 10));
+}
+
+export function buildDynamicSearchSchema(
+  fields: ModelField[],
+  dictOptionsMap: Record<string, Array<{ label: string; value: string }>> = {},
+): VbenFormSchema[] {
+  return getDynamicSearchFields(fields).map((field) => {
+    const fieldName = normalizeFieldCode(field.code);
+    const common = {
+      fieldName,
+      label: field.name,
+    } satisfies Partial<VbenFormSchema>;
+
+    if (fieldName === 'status') {
+      return {
+        ...common,
+        component: 'Select',
+        componentProps: {
+          allowClear: true,
+          options: STATUS_SEARCH_OPTIONS,
+          placeholder: `请选择${field.name}`,
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    if (field.dataType === 'dict') {
+      return {
+        ...common,
+        component: 'Select',
+        componentProps: {
+          allowClear: true,
+          options: field.dictCode ? (dictOptionsMap[field.dictCode] ?? []) : [],
+          placeholder: `请选择${field.name}`,
+          showSearch: true,
+          optionFilterProp: 'label',
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    if (field.dataType === 'boolean') {
+      return {
+        ...common,
+        component: 'Select',
+        componentProps: {
+          allowClear: true,
+          options: [
+            { label: '是', value: 'true' },
+            { label: '否', value: 'false' },
+          ],
+          placeholder: `请选择${field.name}`,
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    if (field.dataType === 'date') {
+      return {
+        ...common,
+        component: 'RangePicker',
+        componentProps: {
+          valueFormat: 'YYYY-MM-DD',
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    if (field.dataType === 'timestamptz') {
+      return {
+        ...common,
+        component: 'RangePicker',
+        componentProps: {
+          showTime: true,
+          valueFormat: 'YYYY-MM-DD HH:mm:ss',
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    if (field.dataType === 'int4' || field.dataType === 'numeric') {
+      return {
+        ...common,
+        component: 'Input',
+        componentProps: {
+          placeholder: getFieldPlaceholder(field.name),
+        },
+      } satisfies VbenFormSchema;
+    }
+
+    return {
+      ...common,
+      component: 'Input',
+      componentProps: {
+        placeholder: getFieldPlaceholder(field.name),
+      },
+    } satisfies VbenFormSchema;
+  });
+}
+
+export function buildDynamicFilters(
+  fields: ModelField[],
+  values: Record<string, any>,
+) {
+  const searchableFields = getDynamicSearchFields(fields);
+  const filters: Record<string, string> = {};
+
+  for (const field of searchableFields) {
+    const fieldCode = normalizeFieldCode(field.code);
+    const rawValue = values[fieldCode];
+
+    if (
+      rawValue === undefined ||
+      rawValue === null ||
+      rawValue === '' ||
+      (Array.isArray(rawValue) && rawValue.length === 0)
+    ) {
+      continue;
+    }
+
+    if (field.dataType === 'date' || field.dataType === 'timestamptz') {
+      const [start, end] = Array.isArray(rawValue) ? rawValue : [];
+      if (start) {
+        filters[`${fieldCode}__from`] = `gte.${start}`;
+      }
+      if (end) {
+        filters[`${fieldCode}__to`] = `lte.${end}`;
+      }
+      continue;
+    }
+
+    if (field.dataType === 'dict' || field.dataType === 'boolean') {
+      filters[fieldCode] = `eq.${rawValue}`;
+      continue;
+    }
+
+    if (field.dataType === 'int4' || field.dataType === 'numeric') {
+      filters[fieldCode] = `eq.${rawValue}`;
+      continue;
+    }
+
+    filters[fieldCode] = `ilike.%${String(rawValue).trim()}%`;
+  }
+
+  return filters;
+}
 
 export const buildDynamicFormSchema = (
   fields: ModelField[],
@@ -165,7 +409,7 @@ export const buildDynamicFormSchema = (
     .filter((field) => field.status !== false)
     .toSorted((a, b) => Number(a.sort ?? 10) - Number(b.sort ?? 10))
     .map((field) => {
-      const fieldName = field.code.toLowerCase();
+      const fieldName = normalizeFieldCode(field.code);
       const common = {
         fieldName,
         help: field.remarks || undefined,
@@ -209,7 +453,7 @@ export const buildDynamicFormSchema = (
           component: 'InputNumber',
           componentProps: {
             min: 0,
-            placeholder: `请输入${field.name}`,
+            placeholder: getFieldPlaceholder(field.name),
             precision:
               field.dataType === 'numeric' ? (field.precision ?? 2) : 0,
             style: { width: '100%' },
@@ -233,7 +477,7 @@ export const buildDynamicFormSchema = (
               try {
                 const file = uploadOptions.file as File;
                 const result = await uploadFileToSupabaseStorage(file, {
-                  fieldCode: field.code.toLowerCase(),
+                  fieldCode: normalizeFieldCode(field.code),
                   tableName: options.tableName,
                 });
 
@@ -271,7 +515,7 @@ export const buildDynamicFormSchema = (
         component: (field.length ?? 0) > 120 ? 'Textarea' : 'Input',
         componentProps: {
           maxlength: field.length ?? undefined,
-          placeholder: `请输入${field.name}`,
+          placeholder: getFieldPlaceholder(field.name),
         },
         rules: field.isRequired ? 'required' : undefined,
       } satisfies VbenFormSchema;
@@ -301,20 +545,21 @@ export const useSchema = (): VbenFormSchema[] => [
     component: 'Select',
     componentProps: {
       options: [
-        { label: '正常', value: 'normal' },
-        { label: '审核中', value: 'pending' },
+        { label: '草稿', value: 'draft' },
+        { label: '待审批', value: 'pending_approval' },
+        { label: '已生效', value: 'published' },
         { label: '失效', value: 'invalid' },
       ],
       placeholder: '请选择状态',
     },
+    defaultValue: 'draft',
     fieldName: 'status',
     label: '状态',
-    defaultValue: 'pending',
   },
   {
     component: 'Textarea',
     componentProps: {
-      placeholder: '其他属性数据...',
+      placeholder: '其他业务属性数据...',
     },
     fieldName: 'properties',
     label: '业务属性',
@@ -336,8 +581,9 @@ export const useSearchSchema = (): VbenFormSchema[] => [
     component: 'Select',
     componentProps: {
       options: [
-        { label: '正常', value: 'normal' },
-        { label: '审核中', value: 'pending' },
+        { label: '草稿', value: 'draft' },
+        { label: '待审批', value: 'pending_approval' },
+        { label: '已生效', value: 'published' },
         { label: '失效', value: 'invalid' },
       ],
     },

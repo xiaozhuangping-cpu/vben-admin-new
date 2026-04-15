@@ -25,6 +25,7 @@ import {
 } from 'ant-design-vue';
 
 import { getDictItemOptionsApi } from '#/api/mdm/dict';
+import { enqueueAndDispatchDistributionTasksApi } from '#/api/mdm/distribution';
 import {
   createDynamicMasterDataRecordApi,
   deleteDynamicMasterDataRecordApi,
@@ -47,6 +48,7 @@ import {
   getSectionFields,
   normalizeDesignerSchema,
 } from '#/views/mdm/model/definition/form-designer';
+import RelationMasterInput from '#/views/mdm/model/definition/modules/relation-master-input.vue';
 
 const emit = defineEmits(['success']);
 
@@ -69,6 +71,9 @@ const compositeDrawerTitle = ref('');
 const compositeDrawerEditIndex = ref<null | number>(null);
 const compositeDrawerValues = ref<Record<string, any>>({});
 const submitting = ref(false);
+const relationDefinitionMetaMap = ref<
+  Record<string, { tableName: string; titleFieldCode: string }>
+>({});
 
 const modelId = computed(() => String(currentData.value?.definitionId || ''));
 const rootFieldPermissionMap = computed(
@@ -136,6 +141,58 @@ function getStoredSchemaByModelId(targetModelId: string) {
   } catch {
     return null;
   }
+}
+
+function isRelationMasterField(item?: any) {
+  return !!item?.relatedDefinitionId;
+}
+
+function getRelationDisplayKey(fieldCode?: string) {
+  return `${normalizeKey(fieldCode)}__display`;
+}
+
+function getRelationDisplayValue(
+  values: Record<string, any>,
+  fieldCode?: string,
+) {
+  return values[getRelationDisplayKey(fieldCode)] ?? '';
+}
+
+function setRootRelationFieldValue(
+  fieldCode: string,
+  payload: { displayName: string; id: string },
+) {
+  formValues.value = {
+    ...formValues.value,
+    [normalizeKey(fieldCode)]: payload.id,
+    [getRelationDisplayKey(fieldCode)]: payload.displayName,
+  };
+}
+
+function setCompositeSingleRelationFieldValue(
+  relatedDefinitionId: string,
+  fieldCode: string,
+  payload: { displayName: string; id: string },
+) {
+  compositeSingleValues.value = {
+    ...compositeSingleValues.value,
+    [relatedDefinitionId]: {
+      ...getCompositeSingleValue(relatedDefinitionId),
+      [normalizeKey(fieldCode)]: payload.id,
+      [getRelationDisplayKey(fieldCode)]: payload.displayName,
+    },
+  };
+}
+
+function setCompositeDrawerRelationFieldValue(
+  fieldCode: string,
+  payload: { displayName: string; id: string },
+) {
+  compositeDrawerValues.value = {
+    ...compositeDrawerValues.value,
+    [normalizeKey(fieldCode)]: payload.id,
+    [getRelationDisplayKey(fieldCode)]: payload.displayName,
+  };
 }
 
 function renderPlaceholder(item: any) {
@@ -294,6 +351,100 @@ function getCompositeFieldMetaByFieldCode(
   return getCompositeFieldMeta(definitionId, normalizeKey(fieldCode));
 }
 
+async function ensureRelationDefinitionMeta(relatedDefinitionId?: string) {
+  const definitionId = String(relatedDefinitionId || '');
+  if (!definitionId || relationDefinitionMetaMap.value[definitionId]) {
+    return relationDefinitionMetaMap.value[definitionId];
+  }
+
+  const [definition, fields] = await Promise.all([
+    getModelDefinitionDetailApi(definitionId),
+    getModelFieldListApi(definitionId),
+  ]);
+
+  const sortedFields = [...fields]
+    .filter((field: any) => field.status !== false)
+    .toSorted((a: any, b: any) => Number(a.sort ?? 10) - Number(b.sort ?? 10));
+  const titleField =
+    sortedFields.find((field: any) => field.isTitle) ??
+    sortedFields.find((field: any) => field.listVisible) ??
+    sortedFields[0];
+
+  const meta = {
+    tableName: String(definition?.tableName || ''),
+    titleFieldCode: String(titleField?.code || ''),
+  };
+  relationDefinitionMetaMap.value = {
+    ...relationDefinitionMetaMap.value,
+    [definitionId]: meta,
+  };
+  return meta;
+}
+
+async function resolveRelationDisplayName(
+  relatedDefinitionId?: string,
+  value?: any,
+) {
+  const id = String(value || '');
+  if (!relatedDefinitionId || !id) {
+    return '';
+  }
+
+  try {
+    const meta = await ensureRelationDefinitionMeta(relatedDefinitionId);
+    if (!meta?.tableName) {
+      return id;
+    }
+    const response = await getDynamicMasterDataRecordsApi(meta.tableName, {
+      id: `eq.${id}`,
+      page: 1,
+      pageSize: 1,
+    });
+    const row = response.items[0];
+    if (!row) {
+      return id;
+    }
+    const normalizedTitleKey = normalizeKey(meta.titleFieldCode);
+    return String(
+      row[normalizedTitleKey] ??
+        row[meta.titleFieldCode] ??
+        row.entityname ??
+        row.name ??
+        row.id ??
+        id,
+    );
+  } catch (error) {
+    console.error('resolve relation display failed', error);
+    return id;
+  }
+}
+
+async function hydrateRelationDisplayValues(
+  fields: any[],
+  values: Record<string, any>,
+) {
+  const nextValues = { ...values };
+
+  await Promise.all(
+    fields
+      .filter((item: any) => isRelationMasterField(item))
+      .map(async (item: any) => {
+        const valueKey = normalizeKey(item.fieldCode || item.code);
+        const displayKey = getRelationDisplayKey(item.fieldCode || item.code);
+        const relationId = nextValues[valueKey];
+        if (!relationId || nextValues[displayKey]) {
+          return;
+        }
+        nextValues[displayKey] = await resolveRelationDisplayName(
+          item.relatedDefinitionId,
+          relationId,
+        );
+      }),
+  );
+
+  return nextValues;
+}
+
 function resolveRootDictCode(item: any) {
   return (
     (typeof item?.dictCode === 'string' && item.dictCode.trim()) ||
@@ -324,6 +475,16 @@ function buildInitialValues(fields: any[], source?: Record<string, any>) {
         }
         return [key, value ?? item.defaultValue ?? undefined];
       }),
+    ),
+    ...Object.fromEntries(
+      fields
+        .filter((item: any) => isRelationMasterField(item))
+        .map((item: any) => [
+          getRelationDisplayKey(item.fieldCode || item.code),
+          source?.[getRelationDisplayKey(item.fieldCode || item.code)] ??
+            item.relationDisplayName ??
+            '',
+        ]),
     ),
   };
 }
@@ -382,7 +543,7 @@ function getCompositeTableColumns(item: any) {
   ];
 }
 
-function getDisplayValue(value: any, field: any) {
+function getDisplayValue(value: any, field: any, row?: Record<string, any>) {
   if (field?.component === 'Attachment') {
     const list = Array.isArray(value) ? value : (value ? [value] : []);
     return list.length > 0 ? `${list.length} 个附件` : '-';
@@ -395,6 +556,9 @@ function getDisplayValue(value: any, field: any) {
       value ??
       '-'
     );
+  }
+  if (isRelationMasterField(field)) {
+    return row?.[getRelationDisplayKey(field.fieldCode)] ?? value ?? '-';
   }
   return value ?? '-';
 }
@@ -427,7 +591,10 @@ function serializePayload(
 ) {
   return Object.fromEntries(
     Object.entries(values)
-      .filter(([key, value]) => key !== 'id' && value !== undefined)
+      .filter(
+        ([key, value]) =>
+          key !== 'id' && !key.endsWith('__display') && value !== undefined,
+      )
       .map(([key, value]) => {
         const field = resolveField(key);
         if (
@@ -524,11 +691,17 @@ function openCompositeDrawer(item: any, editIndex?: number) {
   compositeDrawerEditIndex.value = editIndex ?? null;
   compositeDrawerTitle.value =
     editIndex === undefined ? `新增${item.label}` : `编辑${item.label}`;
-  compositeDrawerValues.value =
+  const initialValues =
     editIndex === undefined
       ? buildInitialValues(getCompositeLeafFields(definitionId))
       : { ...getCompositeRows(definitionId)[editIndex] };
-  compositeDrawerOpen.value = true;
+  void hydrateRelationDisplayValues(
+    getCompositeLeafFields(definitionId),
+    initialValues,
+  ).then((values) => {
+    compositeDrawerValues.value = values;
+    compositeDrawerOpen.value = true;
+  });
 }
 
 function closeCompositeDrawer() {
@@ -643,8 +816,13 @@ async function loadExistingCompositeData(parentRow: Record<string, any>) {
       page: 1,
       pageSize: 1000,
     });
-    const rows = response.items.map((row: any) =>
-      buildInitialValues(getCompositeLeafFields(definitionId), row),
+    const rows = await Promise.all(
+      response.items.map((row: any) =>
+        hydrateRelationDisplayValues(
+          getCompositeLeafFields(definitionId),
+          buildInitialValues(getCompositeLeafFields(definitionId), row),
+        ),
+      ),
     );
     if (relation.relationType === '1:1') {
       compositeSingleValues.value = {
@@ -678,11 +856,12 @@ async function loadDesignForm() {
     );
     await loadCompositeSchemas();
     await preloadDictOptions();
-    formValues.value = buildInitialValues(
-      visibleSections.value
-        .flatMap((section: any) => getSectionFields(section))
-        .filter((item: any) => item.component !== 'CompositeModel'),
-      currentData.value,
+    const rootFields = visibleSections.value
+      .flatMap((section: any) => getSectionFields(section))
+      .filter((item: any) => item.component !== 'CompositeModel');
+    formValues.value = await hydrateRelationDisplayValues(
+      rootFields,
+      buildInitialValues(rootFields, currentData.value),
     );
     if (currentData.value?.id) {
       await loadExistingCompositeData(currentData.value);
@@ -758,7 +937,7 @@ function resolveSubmitStatus(mode: 'save' | 'submit') {
   if (mode === 'save') {
     return 'draft';
   }
-  return currentData.value?.needAudit ? 'pending' : 'published';
+  return currentData.value?.needAudit ? 'pending_approval' : 'published';
 }
 
 async function handleSubmit(mode: 'save' | 'submit') {
@@ -794,6 +973,19 @@ async function handleSubmit(mode: 'save' | 'submit') {
         )
       : createDynamicMasterDataRecordApi(currentData.value.tableName, payload));
     await saveCompositeData(saved);
+    if (currentData.value?.definitionId && saved?.id) {
+      await enqueueAndDispatchDistributionTasksApi({
+        definitionId: String(currentData.value.definitionId),
+        operationType: currentData.value?.id ? 'update' : 'create',
+        recordId: String(saved.id),
+        triggerMode: 'event',
+      }).catch((error) => {
+        console.error('enqueue distribution tasks failed', error);
+        message.warning(
+          '主数据已保存，但分发任务创建失败，请稍后在“数据分发”中检查。',
+        );
+      });
+    }
     currentData.value?.onSuccess?.();
     emit('success');
     modalApi.close();
@@ -865,6 +1057,23 @@ const [Modal, modalApi] = useVbenModal({
                     >
                       组合模型暂请放在普通分区中维护
                     </div>
+                    <RelationMasterInput
+                      v-else-if="
+                        item.component === 'Input' &&
+                        isRelationMasterField(item)
+                      "
+                      :disabled="item.readonly"
+                      :display-value="
+                        getRelationDisplayValue(formValues, item.fieldCode)
+                      "
+                      :model-value="formValues[normalizeKey(item.fieldCode)]"
+                      :placeholder="renderPlaceholder(item)"
+                      :readonly="item.readonly"
+                      :related-definition-id="item.relatedDefinitionId"
+                      @select="
+                        setRootRelationFieldValue(item.fieldCode, $event)
+                      "
+                    />
                     <Input
                       v-else-if="item.component === 'Input'"
                       v-model:value="formValues[normalizeKey(item.fieldCode)]"
@@ -969,9 +1178,9 @@ const [Modal, modalApi] = useVbenModal({
                           size="small"
                           type="primary"
                           @click="openCompositeDrawer(item)"
-                          >
-新增明细
-</Button>
+                        >
+                          新增明细
+                        </Button>
                       </div>
                       <Table
                         :columns="getCompositeTableColumns(item)"
@@ -984,10 +1193,8 @@ const [Modal, modalApi] = useVbenModal({
                       >
                         <template #bodyCell="{ column, record, index }">
                           <template v-if="column.key === '__seq'">
-{{
-                            Number(index) + 1
-                          }}
-</template>
+                            {{ Number(index) + 1 }}
+                          </template>
                           <template v-else-if="column.key === '__action'">
                             <Space size="small">
                               <Button
@@ -996,9 +1203,9 @@ const [Modal, modalApi] = useVbenModal({
                                 @click="
                                   openCompositeDrawer(item, Number(index))
                                 "
-                                >
-编辑
-</Button>
+                              >
+                                编辑
+                              </Button>
                               <Button
                                 size="small"
                                 type="link"
@@ -1009,25 +1216,26 @@ const [Modal, modalApi] = useVbenModal({
                                     Number(index),
                                   )
                                 "
-                                >
-删除
-</Button>
+                              >
+                                删除
+                              </Button>
                             </Space>
                           </template>
                           <template v-else>
-{{
-                            getDisplayValue(
-                              record[String(column.dataIndex)],
-                              getCompositeLeafFields(
-                                item.relatedDefinitionId,
-                              ).find(
-                                (field: any) =>
-                                  normalizeKey(field.fieldCode) ===
-                                  column.dataIndex,
-                              ),
-                            )
-                          }}
-</template>
+                            {{
+                              getDisplayValue(
+                                record[String(column.dataIndex)],
+                                getCompositeLeafFields(
+                                  item.relatedDefinitionId,
+                                ).find(
+                                  (field: any) =>
+                                    normalizeKey(field.fieldCode) ===
+                                    column.dataIndex,
+                                ),
+                                record,
+                              )
+                            }}
+                          </template>
                         </template>
                       </Table>
                     </template>
@@ -1050,8 +1258,40 @@ const [Modal, modalApi] = useVbenModal({
                                 class="ml-1 text-red-500"
                                 >*</span>
                             </div>
+                            <RelationMasterInput
+                              v-if="
+                                childItem.component === 'Input' &&
+                                isRelationMasterField(childItem)
+                              "
+                              :disabled="childItem.readonly"
+                              :display-value="
+                                getRelationDisplayValue(
+                                  getCompositeSingleValue(
+                                    String(item.relatedDefinitionId),
+                                  ),
+                                  childItem.fieldCode,
+                                )
+                              "
+                              :model-value="
+                                getCompositeSingleValue(
+                                  String(item.relatedDefinitionId),
+                                )[normalizeKey(childItem.fieldCode)]
+                              "
+                              :placeholder="renderPlaceholder(childItem)"
+                              :readonly="childItem.readonly"
+                              :related-definition-id="
+                                childItem.relatedDefinitionId
+                              "
+                              @select="
+                                setCompositeSingleRelationFieldValue(
+                                  String(item.relatedDefinitionId),
+                                  childItem.fieldCode,
+                                  $event,
+                                )
+                              "
+                            />
                             <Input
-                              v-if="childItem.component === 'Input'"
+                              v-else-if="childItem.component === 'Input'"
                               :value="
                                 getCompositeSingleValue(
                                   String(item.relatedDefinitionId),
@@ -1209,10 +1449,8 @@ const [Modal, modalApi] = useVbenModal({
                               "
                             >
                               <Button>
-{{
-                                getAttachmentButtonText(childItem)
-                              }}
-</Button>
+                                {{ getAttachmentButtonText(childItem) }}
+                              </Button>
                             </Upload>
                             <Input
                               v-else
@@ -1237,6 +1475,20 @@ const [Modal, modalApi] = useVbenModal({
                     </template>
                   </div>
                 </template>
+                <RelationMasterInput
+                  v-else-if="
+                    item.component === 'Input' && isRelationMasterField(item)
+                  "
+                  :disabled="item.readonly"
+                  :display-value="
+                    getRelationDisplayValue(formValues, item.fieldCode)
+                  "
+                  :model-value="formValues[normalizeKey(item.fieldCode)]"
+                  :placeholder="renderPlaceholder(item)"
+                  :readonly="item.readonly"
+                  :related-definition-id="item.relatedDefinitionId"
+                  @select="setRootRelationFieldValue(item.fieldCode, $event)"
+                />
                 <Input
                   v-else-if="item.component === 'Input'"
                   v-model:value="formValues[normalizeKey(item.fieldCode)]"
@@ -1326,8 +1578,24 @@ const [Modal, modalApi] = useVbenModal({
                 {{ item.label
                 }}<span v-if="item.required" class="ml-1 text-red-500">*</span>
               </div>
+              <RelationMasterInput
+                v-if="item.component === 'Input' && isRelationMasterField(item)"
+                :disabled="item.readonly"
+                :display-value="
+                  getRelationDisplayValue(compositeDrawerValues, item.fieldCode)
+                "
+                :model-value="
+                  compositeDrawerValues[normalizeKey(item.fieldCode)]
+                "
+                :placeholder="renderPlaceholder(item)"
+                :readonly="item.readonly"
+                :related-definition-id="item.relatedDefinitionId"
+                @select="
+                  setCompositeDrawerRelationFieldValue(item.fieldCode, $event)
+                "
+              />
               <Input
-                v-if="item.component === 'Input'"
+                v-else-if="item.component === 'Input'"
                 v-model:value="
                   compositeDrawerValues[normalizeKey(item.fieldCode)]
                 "
@@ -1439,15 +1707,15 @@ const [Modal, modalApi] = useVbenModal({
       <div class="mt-6 flex justify-end gap-2 border-t border-gray-200 pt-4">
         <Button :disabled="submitting" @click="modalApi.close()">取消</Button>
         <Button :loading="submitting" @click="handleSubmit('save')">
-保存
-</Button>
+          保存
+        </Button>
         <Button
           :loading="submitting"
           type="primary"
           @click="handleSubmit('submit')"
-          >
-提交
-</Button>
+        >
+          提交
+        </Button>
       </div>
     </div>
   </Modal>

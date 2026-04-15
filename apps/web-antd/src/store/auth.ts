@@ -7,13 +7,10 @@ import { LOGIN_PATH } from '@vben/constants';
 import { preferences } from '@vben/preferences';
 import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 
-import { notification } from 'ant-design-vue';
 import { defineStore } from 'pinia';
 
 import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api';
 import { clearCurrentRbacContextCache } from '#/api/core/rbac-context';
-import { $t } from '#/locales';
-
 export const useAuthStore = defineStore('auth', () => {
   const accessStore = useAccessStore();
   const userStore = useUserStore();
@@ -71,14 +68,6 @@ export const useAuthStore = defineStore('auth', () => {
                 userInfo.homePath || preferences.app.defaultHomePath,
               );
         }
-
-        if (userInfo?.realName) {
-          notification.success({
-            description: `${$t('authentication.loginSuccessDesc')}:${userInfo?.realName}`,
-            duration: 3,
-            message: $t('authentication.loginSuccess'),
-          });
-        }
       }
     } finally {
       loginLoading.value = false;
@@ -90,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(redirect: boolean = true) {
+    const currentFullPath = router.currentRoute.value.fullPath;
     try {
       await logoutApi();
     } catch {
@@ -106,10 +96,18 @@ export const useAuthStore = defineStore('auth', () => {
       path: LOGIN_PATH,
       query: redirect
         ? {
-            redirect: encodeURIComponent(router.currentRoute.value.fullPath),
+            redirect: encodeURIComponent(currentFullPath),
           }
         : {},
     });
+
+    if (router.currentRoute.value.path !== LOGIN_PATH) {
+      window.location.replace(
+        redirect
+          ? `${LOGIN_PATH}?redirect=${encodeURIComponent(currentFullPath)}`
+          : LOGIN_PATH,
+      );
+    }
   }
 
   async function fetchUserInfo() {

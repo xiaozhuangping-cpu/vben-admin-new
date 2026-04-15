@@ -15,6 +15,7 @@ export type FormDesignerField = {
   readonly: boolean;
   relatedDefinitionId?: string;
   relatedModelName?: string;
+  relationDisplayName?: string;
   relationType?: string;
   required: boolean;
   sourceKind?: 'composite' | 'field';
@@ -71,7 +72,10 @@ export type FieldMeta = {
   code: string;
   component: string;
   dictCode?: string;
+  isTitle?: boolean;
   label: string;
+  relatedDefinitionId?: string;
+  required: boolean;
 };
 
 export type CompositeModelMeta = {
@@ -133,7 +137,10 @@ export function buildFieldMetaMap(fields: ModelField[]) {
           code: item.code,
           component: getDefaultComponent(item.dataType),
           dictCode: item.dictCode ?? '',
+          isTitle: !!item.isTitle,
           label: item.name,
+          relatedDefinitionId: item.relatedDefinitionId ?? '',
+          required: !!item.isRequired,
         },
       ]),
   );
@@ -158,9 +165,11 @@ export function createFieldWidget(
     fieldCode: meta.code,
     id: createId('field'),
     label: meta.label,
-    labelLayout: 'vertical',
+    labelLayout: 'horizontal',
     readonly: false,
-    required: false,
+    relationDisplayName: '',
+    relatedDefinitionId: meta.relatedDefinitionId ?? '',
+    required: meta.required ?? false,
     sourceKind: 'field',
     span: 12,
     visible: true,
@@ -179,7 +188,7 @@ export function createCompositeWidget(
     help: '',
     id: createId('field'),
     label: composite.label,
-    labelLayout: 'vertical',
+    labelLayout: 'horizontal',
     placeholder: '',
     readonly: false,
     relatedDefinitionId: composite.definitionId,
@@ -255,10 +264,12 @@ function normalizeField(
     labelLayout: item.labelLayout ?? 'vertical',
     placeholder: item.placeholder ?? '',
     readonly: item.readonly ?? false,
-    relatedDefinitionId: item.relatedDefinitionId ?? '',
+    relationDisplayName: item.relationDisplayName ?? '',
+    relatedDefinitionId:
+      item.relatedDefinitionId ?? meta?.relatedDefinitionId ?? '',
     relatedModelName: item.relatedModelName ?? '',
     relationType: item.relationType ?? '',
-    required: item.required ?? false,
+    required: meta?.required ? true : (item.required ?? false),
     sourceKind: item.sourceKind ?? 'field',
     span: item.span ?? 12,
     summaryColumns,

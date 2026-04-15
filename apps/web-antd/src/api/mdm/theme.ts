@@ -1,6 +1,6 @@
 import { requestClient } from '#/api/request';
-import { withRequestCache } from './_cache';
 
+import { withRequestCache } from './_cache';
 import { getUserGroupListApi } from './user-group';
 
 export interface Theme {
@@ -20,7 +20,7 @@ export async function getThemeListApi(params: any = {}) {
       params: {
         ...rest,
         select: '*',
-        order: rest.order ?? 'updated_at.desc,created_at.desc',
+        order: rest.order ?? 'order.asc,updated_at.desc,created_at.desc',
         limit: pageSize,
         offset: (page - 1) * pageSize,
       },
@@ -31,11 +31,14 @@ export async function getThemeListApi(params: any = {}) {
     });
 
     const contentRange =
-      response.headers?.['content-range'] ?? response.headers?.['Content-Range'];
+      response.headers?.['content-range'] ??
+      response.headers?.['Content-Range'];
     const totalFromHeader = contentRange
       ? Number.parseInt(contentRange.split('/').pop() || '0', 10)
       : 0;
-    const rawItems = Array.isArray(response.data?.data) ? response.data.data : [];
+    const rawItems = Array.isArray(response.data?.data)
+      ? response.data.data
+      : [];
     const { items: userGroups } = await getUserGroupListApi({ pageSize: 1000 });
     const userGroupMap = new Map(
       userGroups.map((group: any) => [group.id, group.name]),

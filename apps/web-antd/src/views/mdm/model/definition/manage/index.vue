@@ -74,6 +74,7 @@ import {
 } from '../form-designer';
 import FieldFormModal from '../modules/field-form.vue';
 import ModelFormModal from '../modules/form.vue';
+import RelationMasterInput from '../modules/relation-master-input.vue';
 
 const TAB_KEYS = [
   'fields',
@@ -309,6 +310,19 @@ function getFieldAttachmentMode(field: any) {
   return '';
 }
 
+function isFieldRequiredByDefinition(fieldCode?: string) {
+  if (!fieldCode) {
+    return false;
+  }
+  return fields.value.some(
+    (field) => field.code === fieldCode && !!field.isRequired,
+  );
+}
+
+function isRelationMasterField(item?: any) {
+  return !!item?.relatedDefinitionId;
+}
+
 const usedFieldCodes = computed(
   () =>
     new Set(
@@ -418,6 +432,7 @@ const fieldColumns: TableColumnsType = [
     key: 'validationRuleName',
     width: 160,
   },
+  { title: '标题', dataIndex: 'isTitle', key: 'isTitle', width: 90 },
   { title: '排序', dataIndex: 'sort', key: 'sort', width: 90 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
   { title: '操作', key: 'action', width: 220, fixed: 'right' },
@@ -1305,11 +1320,31 @@ function saveDisplayConfig() {
   message.success('表单设计已保存');
 }
 
-function handleOpenPreview() {
-  router.push({
-    name: 'MdmModelDefinitionPreview',
-    params: { id: modelId.value },
-  });
+async function handleOpenPreview() {
+  if (!modelId.value) {
+    message.warning('未获取到模型标识，暂时无法打开预览页。');
+    return;
+  }
+
+  setSafeSessionStorage(
+    getDisplayDraftStorageKey(modelId.value),
+    normalizeDesignerSchema(
+      fields.value,
+      designerSchema.value,
+      compositePaletteModels.value,
+    ),
+  );
+
+  try {
+    const target = router.resolve({
+      name: 'MdmModelDefinitionPreview',
+      params: { id: modelId.value },
+    });
+    await router.push(target.fullPath);
+  } catch (error) {
+    console.error('open preview failed', error);
+    message.error('打开预览页失败，请稍后重试。');
+  }
 }
 
 function openCompositeModelDesigner(relatedDefinitionId?: string) {
@@ -1332,6 +1367,17 @@ async function saveAuthConfig() {
     return;
   }
 
+  const normalizedRowFilterSql = String(authRowFilterSql.value || '').trim();
+  if (
+    /\bselect\b/i.test(normalizedRowFilterSql) ||
+    /\bfrom\b/i.test(normalizedRowFilterSql)
+  ) {
+    message.warning(
+      '行权限配置仅支持填写 WHERE 后面的条件表达式，不能填写 SELECT/FROM 查询语句',
+    );
+    return;
+  }
+
   try {
     authLoading.value = true;
     await saveModelDataAuthConfigApi({
@@ -1351,7 +1397,7 @@ async function saveAuthConfig() {
           };
         }),
       groupIds: authSelectedGroupIds.value,
-      rowFilterSql: authRowFilterSql.value,
+      rowFilterSql: normalizedRowFilterSql,
       status: true,
     });
     message.success('数据授权配置已保存');
@@ -1787,6 +1833,11 @@ onMounted(async () => {
                       {{ fieldTypeMap[record.dataType] ?? record.dataType }}
                     </Tag>
                   </template>
+                  <template v-else-if="column.key === 'isTitle'">
+                    <Tag :color="record.isTitle ? 'blue' : 'default'">
+                      {{ record.isTitle ? '是' : '否' }}
+                    </Tag>
+                  </template>
                   <template v-else-if="column.key === 'status'">
                     <Tag :color="record.status ? 'success' : 'default'">
                       {{ record.status ? '启用' : '禁用' }}
@@ -2123,6 +2174,21 @@ onMounted(async () => {
                                   <Tag color="blue">子模型设计单独维护</Tag>
                                 </div>
                               </div>
+                              <RelationMasterInput
+                                v-else-if="
+                                  item.component === 'Input' &&
+                                  isRelationMasterField(item)
+                                "
+                                v-model:display-value="item.relationDisplayName"
+                                v-model:model-value="item.defaultValue"
+                                :placeholder="
+                                  item.placeholder || `请选择${item.label}`
+                                "
+                                :readonly="true"
+                                :related-definition-id="
+                                  item.relatedDefinitionId
+                                "
+                              />
                               <Input
                                 v-else-if="item.component === 'Input'"
                                 :placeholder="
@@ -2386,6 +2452,24 @@ onMounted(async () => {
                                         </Tag>
                                       </div>
                                     </div>
+                                    <RelationMasterInput
+                                      v-else-if="
+                                        item.component === 'Input' &&
+                                        isRelationMasterField(item)
+                                      "
+                                      v-model:display-value="
+                                        item.relationDisplayName
+                                      "
+                                      v-model:model-value="item.defaultValue"
+                                      :placeholder="
+                                        item.placeholder ||
+                                        `请选择${item.label}`
+                                      "
+                                      :readonly="true"
+                                      :related-definition-id="
+                                        item.relatedDefinitionId
+                                      "
+                                    />
                                     <Input
                                       v-else-if="item.component === 'Input'"
                                       :placeholder="
@@ -2698,7 +2782,12 @@ onMounted(async () => {
                           <span>必填</span>
                           <Switch
                             v-model:checked="selectedField.required"
-                            :disabled="!isEditable"
+                            :disabled="
+                              !isEditable ||
+                              isFieldRequiredByDefinition(
+                                selectedField.fieldCode,
+                              )
+                            "
                           />
                         </div>
                       </div>
@@ -2899,13 +2988,12 @@ onMounted(async () => {
 
                 <Card class="xl:col-span-4" size="small" title="行权限配置">
                   <div class="mb-3 text-xs text-gray-500">
-                    这里填写共享给当前所选用户组的 SQL 条件脚本，建议仅编写
-                    WHERE 条件表达式。
+                    这里仅填写 WHERE 后面的条件表达式，不要写 SELECT/FROM。
                   </div>
                   <Input.TextArea
                     v-model:value="authRowFilterSql"
                     :auto-size="{ minRows: 18, maxRows: 24 }"
-                    placeholder="例如：created_by = auth.uid() and status = 'published'"
+                    placeholder="例如：1=1 或 created_by = current_mdm_user_id() and status = 'published'"
                     class="font-mono"
                   />
                 </Card>

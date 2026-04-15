@@ -46,8 +46,10 @@ export interface ModelField {
   isMultiple?: boolean;
   isPrimary?: boolean;
   isRequired?: boolean;
+  isTitle?: boolean;
   isUnique?: boolean;
   length?: null | number;
+  listVisible?: boolean;
   name: string;
   numberingSegmentId?: null | string;
   numberingSegmentName?: string;
@@ -56,6 +58,7 @@ export interface ModelField {
   relatedDefinitionId?: null | string;
   relatedDefinitionName?: string;
   remarks?: string;
+  searchable?: boolean;
   sort?: number;
   status?: boolean;
   systemField?: boolean;
@@ -116,6 +119,26 @@ const SYSTEM_MODEL_FIELD_META: Record<
       '\u8BB0\u5F55\u4E3B\u6570\u636E\u6700\u540E\u4E00\u6B21\u4FEE\u6539\u65F6\u95F4',
   },
 };
+
+async function findDictCodeByName(name: string) {
+  const targetName = String(name || '').trim();
+  if (!targetName) {
+    return null;
+  }
+
+  const response = await requestClient.get<any>('/supabase-mdm/mdm_dicts', {
+    params: {
+      limit: 1,
+      name: `eq.${targetName}`,
+      select: 'code',
+      status: 'eq.true',
+    },
+    responseReturn: 'raw',
+  });
+
+  const [dict] = Array.isArray(response.data?.data) ? response.data.data : [];
+  return dict?.code ? String(dict.code) : null;
+}
 
 function getSystemModelFieldMeta(code?: string) {
   return code ? (SYSTEM_MODEL_FIELD_META[code] ?? null) : null;
@@ -420,6 +443,11 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
   const definitionId = created?.id;
 
   if (definitionId) {
+    const masterDataStatusDictCode = await findDictCodeByName('主数据状态');
+    if (!masterDataStatusDictCode) {
+      throw new Error('未找到“主数据状态”字典，无法创建默认状态字段');
+    }
+
     const systemFields: ModelField[] = [
       {
         code: 'id',
@@ -429,20 +457,25 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         isRequired: true,
         isUnique: true,
         length: 64,
+        listVisible: false,
         name: '\u4E3B\u952E',
         remarks: '\u7CFB\u7EDF\u4E3B\u952E',
+        searchable: false,
         sort: 1,
         status: true,
       },
       {
         code: 'status',
-        dataType: 'varchar',
+        dataType: 'dict',
         defaultValue: 'draft',
         definitionId,
+        dictCode: masterDataStatusDictCode,
         length: 32,
+        listVisible: true,
         name: '\u72B6\u6001',
         remarks:
           '\u5305\u542B\uFF1A\u8349\u7A3F\u3001\u5F85\u5BA1\u6838\u3001\u5BA1\u6838\u4E0D\u901A\u8FC7\u3001\u5DF2\u751F\u6548\u3001\u5931\u6548',
+        searchable: true,
         sort: 100,
         status: true,
       },
@@ -451,8 +484,10 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         dataType: 'varchar',
         definitionId,
         length: 64,
+        listVisible: false,
         name: '\u521B\u5EFA\u4EBAid',
         remarks: '\u8BB0\u5F55\u4E3B\u6570\u636E\u7684\u521B\u5EFA\u4EBAid',
+        searchable: false,
         sort: 101,
         status: true,
       },
@@ -461,9 +496,11 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         dataType: 'varchar',
         definitionId,
         length: 64,
+        listVisible: false,
         name: '\u521B\u5EFA\u4EBA',
         remarks:
           '\u8BB0\u5F55\u4E3B\u6570\u636E\u7684\u521B\u5EFA\u4EBA\u59D3\u540D',
+        searchable: false,
         sort: 102,
         status: true,
       },
@@ -471,8 +508,10 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         code: 'created_at',
         dataType: 'timestamptz',
         definitionId,
+        listVisible: true,
         name: '\u521B\u5EFA\u65F6\u95F4',
         remarks: '\u8BB0\u5F55\u4E3B\u6570\u636E\u7684\u521B\u5EFA\u65F6\u95F4',
+        searchable: true,
         sort: 103,
         status: true,
       },
@@ -481,8 +520,10 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         dataType: 'varchar',
         definitionId,
         length: 64,
+        listVisible: false,
         name: '\u4FEE\u6539\u4EBAid',
         remarks: '\u8BB0\u5F55\u4E3B\u6570\u636E\u7684\u4FEE\u6539\u4EBAid',
+        searchable: false,
         sort: 104,
         status: true,
       },
@@ -491,9 +532,11 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         dataType: 'varchar',
         definitionId,
         length: 64,
+        listVisible: false,
         name: '\u4FEE\u6539\u4EBA',
         remarks:
           '\u8BB0\u5F55\u4E3B\u6570\u636E\u7684\u4FEE\u6539\u4EBA\u59D3\u540D',
+        searchable: false,
         sort: 105,
         status: true,
       },
@@ -501,9 +544,11 @@ export async function createModelDefinitionApi(data: ModelDefinition) {
         code: 'updated_at',
         dataType: 'timestamptz',
         definitionId,
+        listVisible: true,
         name: '\u4FEE\u6539\u65F6\u95F4',
         remarks:
           '\u8BB0\u5F55\u4E3B\u6570\u636E\u6700\u540E\u4E00\u6B21\u4FEE\u6539\u65F6\u95F4',
+        searchable: true,
         sort: 106,
         status: true,
       },
@@ -697,7 +742,9 @@ export async function getModelFieldListApi(definitionId: string) {
         'multiple',
       isPrimary: item.is_primary,
       isRequired: item.is_required,
+      isTitle: item.is_title ?? false,
       isUnique: item.is_unique,
+      listVisible: item.list_visible ?? false,
       numberingSegmentId: item.numbering_segment_id ?? null,
       numberingSegmentName: item.numbering_segment_id
         ? (numberingMap.get(item.numbering_segment_id) ?? '')
@@ -706,6 +753,7 @@ export async function getModelFieldListApi(definitionId: string) {
       relatedDefinitionId,
       relatedDefinitionName: relatedDefinition?.name ?? '',
       systemField: isSystemModelFieldCode(item.code),
+      searchable: item.searchable ?? false,
       validationRuleId: item.validation_rule_id,
       validationRuleName: item.validation_rule_id
         ? (ruleMap.get(item.validation_rule_id) ?? '')
@@ -719,12 +767,13 @@ export async function createModelFieldApi(data: ModelField) {
   try {
     return await requestClient.post('/supabase-mdm/mdm_model_fields', payload);
   } catch (error) {
-    if (!shouldFallbackModelFieldColumns(error)) {
+    const missingColumns = extractMissingModelFieldColumns(error);
+    if (missingColumns.length === 0) {
       throw error;
     }
     return requestClient.post(
       '/supabase-mdm/mdm_model_fields',
-      stripOptionalModelFieldColumns(payload),
+      stripModelFieldColumns(payload, missingColumns),
     );
   }
 }
@@ -741,11 +790,12 @@ export async function updateModelFieldApi(id: string, data: ModelField) {
       },
     );
   } catch (error) {
-    if (!shouldFallbackModelFieldColumns(error)) {
+    const missingColumns = extractMissingModelFieldColumns(error);
+    if (missingColumns.length === 0) {
       throw error;
     }
     return requestClient.request(`/supabase-mdm/mdm_model_fields?id=eq.${id}`, {
-      data: stripOptionalModelFieldColumns(payload),
+      data: stripModelFieldColumns(payload, missingColumns),
       method: 'PATCH',
     });
   }
@@ -774,6 +824,7 @@ function buildModelFieldPayload(
           is_multiple: attachmentMode === 'multiple',
           is_primary: !!data.isPrimary,
           is_required: !!data.isRequired,
+          is_title: !!data.isTitle,
           is_unique: !!data.isUnique,
           status: data.status ?? true,
         }),
@@ -781,6 +832,7 @@ function buildModelFieldPayload(
     ...(isPublished ? {} : { definition_id: data.definitionId }),
     dict_code: isDictType ? (data.dictCode ?? null) : null,
     length: data.length ?? null,
+    list_visible: data.listVisible ?? false,
     name: data.name,
     numbering_segment_id: data.isCodeField
       ? (data.numberingSegmentId ?? null)
@@ -790,36 +842,45 @@ function buildModelFieldPayload(
       ? (data.relatedDefinitionId ?? null)
       : null,
     remarks: data.remarks ?? '',
+    searchable: data.searchable ?? false,
     sort: data.sort ?? 10,
     validation_rule_id: data.validationRuleId ?? null,
   };
 }
 
-function shouldFallbackModelFieldColumns(error: any) {
+function extractMissingModelFieldColumns(error: any) {
   const message =
     error?.response?.data?.message ??
     error?.response?.data?.error ??
     error?.message ??
     '';
 
-  return (
-    typeof message === 'string' &&
-    message.includes('schema cache') &&
-    message.includes("'mdm_model_fields'")
+  if (
+    typeof message !== 'string' ||
+    !message.includes('schema cache') ||
+    !message.includes("'mdm_model_fields'")
+  ) {
+    return [];
+  }
+
+  const matches = Array.from(
+    message.matchAll(/'([a-z_]+)'/g),
+    (item) => item[1],
+  ).filter(
+    (column): column is string =>
+      typeof column === 'string' && column !== 'mdm_model_fields',
   );
+
+  return [...new Set(matches)];
 }
 
-function stripOptionalModelFieldColumns(payload: Record<string, any>) {
-  const {
-    attachment_mode: _attachmentMode,
-    dict_code: _dictCode,
-    is_code_field: _isCodeField,
-    numbering_segment_id: _numberingSegmentId,
-    related_definition_id: _relatedDefinitionId,
-    ...legacyPayload
-  } = payload;
-
-  return legacyPayload;
+function stripModelFieldColumns(
+  payload: Record<string, any>,
+  columns: string[],
+) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => !columns.includes(key)),
+  );
 }
 
 export async function deleteModelFieldApi(id: string) {

@@ -35,6 +35,7 @@ const [ItemForm, itemFormModalApi] = useVbenModal({
 });
 
 const [ItemDrawer, itemDrawerApi] = useVbenDrawer({
+  class: 'w-[960px] max-w-[96vw]',
   title: '字典条目管理',
 });
 
@@ -65,6 +66,7 @@ async function loadItems() {
     itemRows.value = [];
     return;
   }
+
   itemLoading.value = true;
   try {
     itemRows.value = await getDictItemListApi(selectedDict.value.id);
@@ -124,7 +126,7 @@ function handleDelete(row: any) {
     async onOk() {
       try {
         await deleteDictApi(row.id);
-        message.success(`已删除字典: ${row.name}`);
+        message.success(`已删除字典 ${row.name}`);
         refreshGrid();
       } catch {
         message.error('删除字典失败');
@@ -139,7 +141,7 @@ function handleDeleteItem(row: any) {
     async onOk() {
       try {
         await deleteDictItemApi(row.id);
-        message.success(`已删除条目: ${row.name}`);
+        message.success(`已删除条目 ${row.name}`);
         await loadItems();
         refreshGrid();
       } catch {
@@ -169,22 +171,24 @@ function handleDeleteItem(row: any) {
 
     <ItemDrawer>
       <div class="p-4">
-        <div class="mb-4 flex items-center justify-between">
+        <div class="mb-4 flex items-center justify-between gap-4">
           <div>
-            当前字典:
+            当前字典：
             <Tag color="blue">
               {{ selectedDict?.name }} ({{ selectedDict?.code }})
             </Tag>
           </div>
-          <Button type="primary" size="small" @click="handleCreateItem">
+          <Button size="small" type="primary" @click="handleCreateItem">
             <Plus class="size-4" /> 新增条目
           </Button>
         </div>
+
         <Table
           :columns="useItemColumns()"
           :data-source="itemRows"
           :loading="itemLoading"
           :pagination="false"
+          :scroll="{ x: 860 }"
           row-key="id"
         >
           <template #bodyCell="{ column, record }">
@@ -196,16 +200,16 @@ function handleDeleteItem(row: any) {
             <template v-else-if="column.key === 'action'">
               <Space>
                 <Button
-                  type="link"
                   size="small"
+                  type="link"
                   @click="handleEditItem(record)"
                 >
                   编辑
                 </Button>
                 <Button
-                  type="link"
                   danger
                   size="small"
+                  type="link"
                   @click="handleDeleteItem(record)"
                 >
                   删除

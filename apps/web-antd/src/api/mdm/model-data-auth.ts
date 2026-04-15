@@ -184,7 +184,9 @@ export async function getCurrentModelDataAuthApi(
 
       const currentGroupIds = context.mdmUserId
         ? userGroupResponse.items
-            .filter((item: any) => (item.userIds ?? []).includes(context.mdmUserId))
+            .filter((item: any) =>
+              (item.userIds ?? []).includes(context.mdmUserId),
+            )
             .map((item: any) => String(item.id))
         : [];
 

@@ -34,21 +34,31 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
       const menuList = resp as any[];
 
       // Flat to Tree transformation
-      const listToTree = (list: any[], parentId: string | null = null): any[] => {
+      const listToTree = (
+        list: any[],
+        parentId: null | string = null,
+      ): any[] => {
         return list
           .filter((item) => item.parent_id === parentId)
           .map((item) => {
             const children = listToTree(list, item.id);
+            const isOverviewMenu =
+              item.name === 'MdmModelOverview' ||
+              item.path === '/dashboard/overview' ||
+              item.path === 'overview';
             const menu: any = {
               name: item.name,
               path: item.path,
               component: item.component,
               meta: {
+                affixTab: isOverviewMenu,
+                affixTabOrder: isOverviewMenu ? 1 : undefined,
                 title: item.title,
                 icon: item.icon,
                 order: item.order_no,
                 hideMenu: item.hide_menu,
                 keepAlive: item.keep_alive,
+                tabClosable: !isOverviewMenu,
               },
             };
             if (children.length > 0) {

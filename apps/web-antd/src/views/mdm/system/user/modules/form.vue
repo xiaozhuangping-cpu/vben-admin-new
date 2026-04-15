@@ -1,6 +1,15 @@
 <script lang="ts" setup>
 import { useVbenForm } from '#/adapter/form';
-import { message, Card, Button, Typography, Space, Modal, Input, Tooltip } from 'ant-design-vue';
+import {
+  message,
+  Card,
+  Button,
+  Typography,
+  Space,
+  Modal,
+  Input,
+  Tooltip,
+} from 'ant-design-vue';
 import { createManagedUserApi } from '#/api/mdm/admin-user';
 import { updateUserApi } from '#/api/mdm/user';
 import { updateUserRolesApi } from '#/api/mdm/rbac-user';
@@ -104,7 +113,8 @@ async function onSubmit(values: any) {
       message.success('用户信息已更新');
     } else {
       const resolvedAuthEmail = String(
-        userPayload.authEmail || (userPayload.username?.includes('@') ? userPayload.username : ''),
+        userPayload.authEmail ||
+          (userPayload.username?.includes('@') ? userPayload.username : ''),
       ).trim();
 
       if (!password) {
@@ -134,16 +144,24 @@ async function onSubmit(values: any) {
         roleIds,
       });
       userId = resp?.mdmUser?.id;
+
+      if (!userId) {
+        throw new Error('创建用户失败，未返回新用户信息');
+      }
+
       message.success('新用户创建成功');
     }
-    
+
     if (userId && props.currentData?.id) {
       await updateUserRolesApi(userId, roleIds);
     }
-    
+
     emit('success');
   } catch (error) {
     console.error(error);
+    message.error(
+      error instanceof Error ? error.message : '保存用户失败，请稍后重试',
+    );
   } finally {
     loading.value = false;
   }
@@ -249,9 +267,7 @@ async function handlePasswordSubmit() {
     });
     passwordModalOpen.value = false;
     message.success(
-      result?.email
-        ? `密码已更新，认证账号: ${result.email}`
-        : '密码已更新',
+      result?.email ? `密码已更新，认证账号: ${result.email}` : '密码已更新',
     );
   } finally {
     passwordSaving.value = false;
@@ -260,24 +276,37 @@ async function handlePasswordSubmit() {
 </script>
 
 <template>
-  <Card 
-    class="h-full flex flex-col shadow-sm border-border" 
-    :body-style="{ flex: 1, overflow: 'hidden', padding: '16px', display: 'flex', flexDirection: 'column' }"
+  <Card
+    class="h-full flex flex-col shadow-sm border-border"
+    :body-style="{
+      flex: 1,
+      overflow: 'hidden',
+      padding: '16px',
+      display: 'flex',
+      flexDirection: 'column',
+    }"
   >
     <template #title>
       <div class="flex items-center gap-2">
         <div class="w-1 h-4 bg-primary rounded-full"></div>
         <span>{{ currentData?.id ? '编辑用户信息' : '创建新用户' }}</span>
-        <Typography.Text v-if="currentData?.id" type="secondary" class="text-[11px] font-normal opacity-60 ml-1">
+        <Typography.Text
+          v-if="currentData?.id"
+          type="secondary"
+          class="text-[11px] font-normal opacity-60 ml-1"
+        >
           (ID: {{ currentData.id }})
         </Typography.Text>
       </div>
     </template>
-    
+
     <template #extra>
       <Space v-if="currentData" :size="8">
         <Tooltip title="重置为 123456">
-          <Button @click="handleResetPassword" class="flex items-center justify-center">
+          <Button
+            @click="handleResetPassword"
+            class="flex items-center justify-center"
+          >
             <template #icon><IconifyIcon icon="lucide:key-round" /></template>
           </Button>
         </Tooltip>
@@ -287,7 +316,12 @@ async function handlePasswordSubmit() {
         </Button>
         <div class="w-px h-4 bg-border mx-1"></div>
         <Button @click="handleReset">取消</Button>
-        <Button :loading="loading" type="primary" @click="handleSave" class="flex items-center gap-2">
+        <Button
+          :loading="loading"
+          type="primary"
+          @click="handleSave"
+          class="flex items-center gap-2"
+        >
           <template #icon><IconifyIcon icon="lucide:save" /></template>
           保存用户
         </Button>
@@ -295,11 +329,14 @@ async function handlePasswordSubmit() {
     </template>
 
     <div class="flex-1 overflow-hidden flex flex-col pt-2">
-      <div 
-        v-if="!currentData" 
+      <div
+        v-if="!currentData"
         class="flex-1 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-background-deep text-gray-400 m-2"
       >
-        <IconifyIcon icon="lucide:user-plus" class="text-4xl text-gray-200 mb-4" />
+        <IconifyIcon
+          icon="lucide:user-plus"
+          class="text-4xl text-gray-200 mb-4"
+        />
         <div class="text-sm">选一个小伙伴开始维护吧，或者直接创建新人</div>
       </div>
       <div v-else class="flex-1 overflow-auto custom-scrollbar px-2">
@@ -317,9 +354,16 @@ async function handlePasswordSubmit() {
       @ok="handlePasswordSubmit"
     >
       <div class="space-y-5 pt-4">
-        <div class="bg-blue-50/50 p-3 rounded-xl border border-blue-100 text-blue-600 text-xs flex gap-2">
-          <IconifyIcon icon="lucide:shield-check" class="flex-shrink-0 mt-0.5" />
-          <span>修改密码后，用户下次登录时需使用新密码。请确保已将新密码告知相关人员。</span>
+        <div
+          class="bg-blue-50/50 p-3 rounded-xl border border-blue-100 text-blue-600 text-xs flex gap-2"
+        >
+          <IconifyIcon
+            icon="lucide:shield-check"
+            class="flex-shrink-0 mt-0.5"
+          />
+          <span
+            >修改密码后，用户下次登录时需使用新密码。请确保已将新密码告知相关人员。</span
+          >
         </div>
         <div>
           <div class="mb-2 text-sm font-medium text-gray-700">新密码</div>
@@ -344,14 +388,14 @@ async function handlePasswordSubmit() {
 
 <style scoped>
 :deep(.ant-card) {
-  border-radius: 16px;
   overflow: hidden;
+  border-radius: 16px;
 }
 
 :deep(.ant-card-head) {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-  padding: 0 16px;
   min-height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgb(0 0 0 / 4%);
 }
 
 :deep(.vben-form) {
@@ -361,10 +405,12 @@ async function handlePasswordSubmit() {
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #e5e7eb;
   border-radius: 10px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }

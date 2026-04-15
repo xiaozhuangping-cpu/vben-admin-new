@@ -1,5 +1,7 @@
-import { getCurrentRbacContext } from './rbac-context';
+import { formatDateTime } from '#/utils/date';
+
 import { updateUserApi } from '../mdm/user';
+import { getCurrentRbacContext } from './rbac-context';
 
 /**
  * 获取用户信息
@@ -21,12 +23,15 @@ export async function getUserInfoApi() {
     username: email,
     realName: fullName,
     avatar: response.user_metadata?.avatar_url || '',
-    roles: context.roleCodes.length > 0 ? context.roleCodes : context.legacyRoleCodes,
+    roles:
+      context.roleCodes.length > 0
+        ? context.roleCodes
+        : context.legacyRoleCodes,
     roleNames: context.roleNames,
     groupCodes: context.groupCodes,
     groupNames: context.groupNames,
-    lastLogin: context.lastLogin ? new Date(context.lastLogin).toLocaleString() : '',
-    createdAt: context.createdAt ? new Date(context.createdAt).toLocaleString() : '',
+    lastLogin: context.lastLogin ? formatDateTime(context.lastLogin, '') : '',
+    createdAt: context.createdAt ? formatDateTime(context.createdAt, '') : '',
     mdmUserId: context.mdmUserId,
     desc: context.mdmUserId ? 'Supabase MDM User' : 'Supabase User',
     homePath: context.homePath || '/',
@@ -41,11 +46,11 @@ export async function updateProfileApi(data: any) {
   if (!context.mdmUserId) {
     throw new Error('MDM User ID not found');
   }
-  
+
   // 映射字段名回到数据库字段
   const payload = {
     nickname: data.realName,
   };
-  
+
   return updateUserApi(context.mdmUserId, payload as any);
 }

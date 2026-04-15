@@ -23,10 +23,10 @@ const fieldTypeMap: Record<string, string> = {
   attachment: '附件',
   boolean: '布尔',
   date: '日期',
+  dict: '字典',
   int4: '整数',
-  dict: '\u5B57\u5178',
   numeric: '数值',
-  relation_master: '\u5173\u8054\u4E3B\u6570\u636E',
+  relation_master: '关联主数据',
   text: '长文本',
   timestamptz: '日期时间',
   varchar: '短文本',
@@ -43,6 +43,8 @@ const columns = [
     title: '校验规则',
     width: 160,
   },
+  { dataIndex: 'listVisible', key: 'listVisible', title: '列', width: 80 },
+  { dataIndex: 'searchable', key: 'searchable', title: '查', width: 80 },
   { dataIndex: 'sort', key: 'sort', title: '排序', width: 90 },
   { dataIndex: 'status', key: 'status', title: '状态', width: 100 },
   { key: 'action', title: '操作', width: 210 },
@@ -68,6 +70,7 @@ async function loadFields() {
     fields.value = [];
     return;
   }
+
   loading.value = true;
   try {
     fields.value = await getModelFieldListApi(currentData.value.id);
@@ -81,10 +84,12 @@ function openFieldForm(row?: any) {
     message.warning('系统默认字段不允许编辑维护。');
     return;
   }
+
   if (!canAddOrEdit.value) {
     message.warning('当前状态不可直接维护字段，请先发起升级。');
     return;
   }
+
   fieldFormModalApi
     .setData({
       ...row,
@@ -100,13 +105,15 @@ async function handleDelete(row: any) {
     message.warning('系统默认字段不允许删除。');
     return;
   }
+
   if (!canDelete.value) {
     message.warning('只有草稿状态才允许删除字段。');
     return;
   }
+
   try {
     await deleteModelFieldApi(row.id);
-    message.success(`已删除字段: ${row.name}`);
+    message.success(`已删除字段 ${row.name}`);
     await loadFields();
     emit('success');
   } catch {
@@ -119,6 +126,7 @@ async function handleToggleEnabled(row: any, status: boolean) {
     message.warning('系统默认字段不允许启用或禁用。');
     return;
   }
+
   if (!canAddOrEdit.value) {
     message.warning('当前状态不可调整字段启停用。');
     return;
@@ -136,12 +144,13 @@ async function handleToggleEnabled(row: any, status: boolean) {
 const [Drawer, drawerApi] = useVbenDrawer({
   class: 'w-[92vw] max-w-[1280px]',
   contentClass: 'overflow-hidden',
-  placement: 'right',
   footer: false,
+  placement: 'right',
   onOpenChange: async (isOpen) => {
     if (!isOpen) {
       return;
     }
+
     currentData.value = drawerApi.getData<any>() || {};
     await loadFields();
   },
@@ -185,7 +194,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
           :data-source="fields"
           :loading="loading"
           :pagination="false"
-          :scroll="{ x: 980, y: 'calc(100vh - 280px)' }"
+          :scroll="{ x: 1120, y: 'calc(100vh - 280px)' }"
           row-key="id"
         >
           <template #bodyCell="{ column, record }">
@@ -198,6 +207,16 @@ const [Drawer, drawerApi] = useVbenDrawer({
             <template v-else-if="column.key === 'dataType'">
               <Tag color="blue">
                 {{ fieldTypeMap[record.dataType] ?? record.dataType }}
+              </Tag>
+            </template>
+            <template v-else-if="column.key === 'listVisible'">
+              <Tag :color="record.listVisible ? 'blue' : 'default'">
+                {{ record.listVisible ? '是' : '否' }}
+              </Tag>
+            </template>
+            <template v-else-if="column.key === 'searchable'">
+              <Tag :color="record.searchable ? 'cyan' : 'default'">
+                {{ record.searchable ? '是' : '否' }}
               </Tag>
             </template>
             <template v-else-if="column.key === 'status'">

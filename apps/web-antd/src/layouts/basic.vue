@@ -1,11 +1,10 @@
 <script lang="ts" setup>
-import type { NotificationItem } from '@vben/layouts';
-
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
 import { useWatermark } from '@vben/hooks';
+import { IconifyIcon } from '@vben/icons';
 import {
   BasicLayout,
   LockScreen,
@@ -15,71 +14,21 @@ import {
 import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 
-import { $t } from '#/locales';
-import { useAuthStore } from '#/store';
-import LoginForm from '#/views/_core/authentication/login.vue';
+import { Badge, Button, Tooltip } from 'ant-design-vue';
 
-const notifications = ref<NotificationItem[]>([
-  {
-    id: 1,
-    avatar: 'https://avatar.vercel.sh/vercel.svg?text=VB',
-    date: '3小时前',
-    isRead: true,
-    message: '描述信息描述信息描述信息',
-    title: '收到了 14 份新周报',
-  },
-  {
-    id: 2,
-    avatar: 'https://avatar.vercel.sh/1',
-    date: '刚刚',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '朱偏右 回复了你',
-  },
-  {
-    id: 3,
-    avatar: 'https://avatar.vercel.sh/1',
-    date: '2024-01-01',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '曲丽丽 评论了你',
-  },
-  {
-    id: 4,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '代办提醒',
-  },
-  {
-    id: 5,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '跳转Workspace示例',
-    link: '/workspace',
-  },
-  {
-    id: 6,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '跳转外部链接示例',
-    link: 'https://doc.vben.pro',
-  },
-]);
+import { $t } from '#/locales';
+import { useAuthStore, useMessageCenterStore } from '#/store';
+import LoginForm from '#/views/_core/authentication/login.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 const authStore = useAuthStore();
 const accessStore = useAccessStore();
+const messageCenterStore = useMessageCenterStore();
 const { destroyWatermark, updateWatermark } = useWatermark();
-const showDot = computed(() =>
-  notifications.value.some((item) => !item.isRead),
-);
+
+const notifications = computed(() => messageCenterStore.topNotifications);
+const unreadCount = computed(() => messageCenterStore.unreadCount);
 
 const menus = computed(() => [
   {
@@ -96,27 +45,64 @@ const avatar = computed(() => {
 });
 
 async function handleLogout() {
+  messageCenterStore.stopPolling();
   await authStore.logout(false);
-}
 
-function handleNoticeClear() {
-  notifications.value = [];
-}
-
-function markRead(id: number | string) {
-  const item = notifications.value.find((item) => item.id === id);
-  if (item) {
-    item.isRead = true;
+  if (window.location.pathname !== '/auth/login') {
+    window.location.replace('/auth/login');
   }
 }
 
-function remove(id: number | string) {
-  notifications.value = notifications.value.filter((item) => item.id !== id);
+async function handleNoticeClear() {
+  await messageCenterStore.clearAll();
 }
 
-function handleMakeAll() {
-  notifications.value.forEach((item) => (item.isRead = true));
+async function markRead(id: number | string) {
+  await messageCenterStore.markRead(id);
 }
+
+async function remove(id: number | string) {
+  await messageCenterStore.remove(id);
+}
+
+async function handleMakeAll() {
+  await messageCenterStore.makeAllRead();
+}
+
+function openMessageCenter() {
+  router.push({ name: 'MdmSystemMessageCenter' });
+}
+
+function handleWindowFocus() {
+  messageCenterStore.refreshNow().catch(() => undefined);
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    messageCenterStore.refreshNow().catch(() => undefined);
+  }
+}
+
+watch(
+  () => userStore.userInfo?.mdmUserId,
+  async (userId) => {
+    if (!userId) {
+      messageCenterStore.stopPolling();
+      return;
+    }
+
+    try {
+      await messageCenterStore.loadRecent();
+    } catch {
+      // Keep layout usable even if the message module is not initialized yet.
+    }
+    messageCenterStore.startPolling();
+  },
+  {
+    immediate: true,
+  },
+);
+
 watch(
   () => ({
     enable: preferences.app.watermark,
@@ -137,6 +123,17 @@ watch(
     immediate: true,
   },
 );
+
+onBeforeUnmount(() => {
+  messageCenterStore.stopPolling();
+  window.removeEventListener('focus', handleWindowFocus);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
+
+onMounted(() => {
+  window.addEventListener('focus', handleWindowFocus);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
 </script>
 
 <template>
@@ -152,14 +149,26 @@ watch(
       />
     </template>
     <template #notification>
-      <Notification
-        :dot="showDot"
-        :notifications="notifications"
-        @clear="handleNoticeClear"
-        @read="(item) => item.id && markRead(item.id)"
-        @remove="(item) => item.id && remove(item.id)"
-        @make-all="handleMakeAll"
-      />
+      <div class="flex items-center gap-1">
+        <Badge :count="unreadCount" :overflow-count="99">
+          <Notification
+            :dot="false"
+            :notifications="notifications"
+            @clear="handleNoticeClear"
+            @view-all="openMessageCenter"
+            @read="(item) => item.id && markRead(item.id)"
+            @remove="(item) => item.id && remove(item.id)"
+            @make-all="handleMakeAll"
+          />
+        </Badge>
+        <Tooltip title="消息中心">
+          <Button type="text" @click="openMessageCenter">
+            <template #icon>
+              <IconifyIcon icon="lucide:inbox" />
+            </template>
+          </Button>
+        </Tooltip>
+      </div>
     </template>
     <template #extra>
       <AuthenticationLoginExpiredModal

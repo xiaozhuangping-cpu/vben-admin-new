@@ -1,5 +1,8 @@
 import type { RouteRecordRaw } from 'vue-router';
 
+import { defineAsyncComponent, defineComponent, h } from 'vue';
+
+import { clearRequestCache } from '#/api/mdm/_cache';
 import { getModelDefinitionListApi } from '#/api/mdm/model-definition';
 
 export interface MasterDataRecord {
@@ -8,7 +11,7 @@ export interface MasterDataRecord {
   entityCode: string;
   entityName: string;
   id: string;
-  status: 'draft' | 'invalid' | 'normal' | 'pending' | 'published';
+  status: 'draft' | 'invalid' | 'pending_approval' | 'published';
   version: string;
   [key: string]: any;
 }
@@ -33,7 +36,7 @@ function createRecord(
   entityName: string,
   createBy: string,
   createTime: string,
-  status: MasterDataRecord['status'] = 'normal',
+  status: MasterDataRecord['status'] = 'draft',
   version = 'v1.0.0',
   extra: Partial<MasterDataRecord> = {},
 ): MasterDataRecord {
@@ -74,7 +77,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         'TikTok Shop Global',
         '渠道经理',
         '2024-04-02 11:20:00',
-        'pending',
+        'pending_approval',
         'v1.1.0',
       ),
     ],
@@ -94,7 +97,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         'Amazon美国旗舰店',
         '店铺运营',
         '2024-04-01 10:15:00',
-        'normal',
+        'published',
         'v1.0.0',
         {
           addressArea: '广东省深圳市宝安区',
@@ -118,7 +121,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         'TikTok东南亚直播店',
         '渠道经理',
         '2024-04-03 14:30:00',
-        'pending',
+        'pending_approval',
         'v1.1.0',
         {
           addressArea: '上海市浦东新区',
@@ -160,7 +163,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '广州迅达电子科技有限公司',
         '采购经理',
         '2024-04-04 16:10:00',
-        'normal',
+        'published',
         'v1.2.0',
       ),
     ],
@@ -187,7 +190,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         'AOYOLO HK LIMITED',
         '财务经理',
         '2024-04-05 09:20:00',
-        'pending',
+        'pending_approval',
       ),
     ],
   },
@@ -231,7 +234,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '美元兑人民币',
         '财务主管',
         '2024-04-03 09:00:00',
-        'normal',
+        'published',
         '2024.04',
       ),
       createRecord(
@@ -240,7 +243,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '欧元兑人民币',
         '财务主管',
         '2024-04-03 09:05:00',
-        'normal',
+        'published',
         '2024.04',
       ),
     ],
@@ -267,7 +270,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '仓储服务费',
         '成本会计',
         '2024-04-04 15:40:00',
-        'pending',
+        'pending_approval',
       ),
     ],
   },
@@ -343,7 +346,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '李雯',
         'HRBP',
         '2024-04-02 08:50:00',
-        'pending',
+        'pending_approval',
       ),
     ],
   },
@@ -445,7 +448,7 @@ export const MASTER_DATA_ITEMS: MasterDataItem[] = [
         '洛杉矶海外仓',
         '仓储经理',
         '2024-04-02 13:30:00',
-        'pending',
+        'pending_approval',
       ),
     ],
   },
@@ -500,6 +503,10 @@ export async function loadDynamicMasterDataItems(force = false) {
     return dynamicMasterDataItems;
   }
 
+  if (force) {
+    clearRequestCache('mdm_model_definitions:list');
+  }
+
   const { items } = await getModelDefinitionListApi({
     pageSize: 1000,
     status: 'eq.published',
@@ -534,12 +541,24 @@ export function getAllMasterDataItems() {
   return [...dynamicMasterDataItems];
 }
 
+export function getAccessibleMasterDataItems(
+  accessibleRouteNames?: Set<string>,
+) {
+  const items = getAllMasterDataItems();
+
+  if (!accessibleRouteNames) {
+    return items;
+  }
+
+  return items.filter((item) => accessibleRouteNames.has(item.routeName));
+}
+
 export function getMasterDataItemByRouteName(routeName?: string) {
   return getAllMasterDataItems().find((item) => item.routeName === routeName);
 }
 
-export function getMasterDataSelectOptions() {
-  return getAllMasterDataItems().map((item) => ({
+export function getMasterDataSelectOptions(accessibleRouteNames?: Set<string>) {
+  return getAccessibleMasterDataItems(accessibleRouteNames).map((item) => ({
     label: `${item.title} · ${item.theme}`,
     value: item.path,
   }));
@@ -547,8 +566,22 @@ export function getMasterDataSelectOptions() {
 
 export function getDynamicMasterDataChildrenRoutes(): RouteRecordRaw[] {
   return dynamicMasterDataItems.map((item) => ({
-    component: () => import('#/views/mdm/data/maintenance/index.vue'),
+    component: defineComponent({
+      name: item.routeName,
+      setup() {
+        const DynamicMaintenancePage = defineAsyncComponent(
+          () => import('#/views/mdm/data/maintenance/index.vue'),
+        );
+
+        return () =>
+          h(DynamicMaintenancePage, {
+            cacheRouteName: item.routeName,
+          });
+      },
+    }),
     meta: {
+      domCached: true,
+      keepAlive: true,
       title: item.title,
     },
     name: item.routeName,

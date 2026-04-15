@@ -53,9 +53,11 @@ export async function getAuthorizedDynamicMasterDataRecordsApi(
     },
   );
 
+  const payload = response.data?.data ?? response.data ?? {};
+
   return {
-    items: Array.isArray(response.data?.items) ? response.data.items : [],
-    total: Number(response.data?.total ?? 0),
+    items: Array.isArray(payload.items) ? payload.items : [],
+    total: Number(payload.total ?? 0),
   };
 }
 

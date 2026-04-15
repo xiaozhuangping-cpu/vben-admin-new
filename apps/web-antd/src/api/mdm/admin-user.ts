@@ -8,6 +8,22 @@ function formatAuthorization(token: string) {
   return token.startsWith('Bearer ') ? token : `Bearer ${token}`;
 }
 
+async function parseFunctionResponse(response: Response) {
+  const rawText = await response.text().catch(() => '');
+
+  if (!rawText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    return {
+      message: rawText,
+    };
+  }
+}
+
 export interface CreateManagedUserPayload {
   authEmail: string;
   nickname: string;
@@ -39,7 +55,7 @@ export async function createManagedUserApi(payload: CreateManagedUserPayload) {
     method: 'POST',
   });
 
-  const result = await response.json().catch(() => ({}));
+  const result = await parseFunctionResponse(response);
 
   if (!response.ok) {
     throw new Error(result?.error || result?.message || '创建用户失败');

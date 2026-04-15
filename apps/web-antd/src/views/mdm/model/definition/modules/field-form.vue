@@ -46,6 +46,14 @@ function getInitialAttachmentMode(data: any) {
   return null;
 }
 
+function supportsSearchable(dataType?: string) {
+  return String(dataType || '') !== 'attachment';
+}
+
+function supportsListVisible(dataType?: string) {
+  return String(dataType || '') !== 'attachment';
+}
+
 const [Form, formApi] = useVbenForm({
   layout: 'vertical',
   wrapperClass: 'grid-cols-1 md:grid-cols-2',
@@ -201,6 +209,12 @@ const [Form, formApi] = useVbenForm({
     },
     {
       component: 'Switch',
+      fieldName: 'isTitle',
+      label: '是否标题',
+      defaultValue: false,
+    },
+    {
+      component: 'Switch',
       fieldName: 'isPrimary',
       label: '主键',
       defaultValue: false,
@@ -216,6 +230,26 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'status',
       label: '启用',
       defaultValue: true,
+    },
+    {
+      component: 'Switch',
+      fieldName: 'listVisible',
+      label: '列表展示',
+      defaultValue: false,
+      dependencies: {
+        show: (values) => supportsListVisible(values.dataType),
+        triggerFields: ['dataType'],
+      },
+    },
+    {
+      component: 'Switch',
+      fieldName: 'searchable',
+      label: '支持搜索',
+      defaultValue: false,
+      dependencies: {
+        show: (values) => supportsSearchable(values.dataType),
+        triggerFields: ['dataType'],
+      },
     },
     {
       component: 'Textarea',
@@ -257,8 +291,16 @@ const [Modal, modalApi] = useVbenModal({
       if (values.dataType === 'attachment') {
         values.attachmentMode = values.attachmentMode || 'single';
         values.isMultiple = values.attachmentMode === 'multiple';
+        values.listVisible = false;
+        values.searchable = false;
       } else {
         values.attachmentMode = null;
+      }
+      if (!supportsListVisible(values.dataType)) {
+        values.listVisible = false;
+      }
+      if (!supportsSearchable(values.dataType)) {
+        values.searchable = false;
       }
       if (isPublishedEditMode.value) {
         const originalLength = currentData.value?.length;
@@ -387,6 +429,12 @@ const [Modal, modalApi] = useVbenModal({
         },
       },
       {
+        fieldName: 'isTitle',
+        componentProps: {
+          disabled: isSystemField || isRevisedMode || isPublishedMode,
+        },
+      },
+      {
         fieldName: 'isUnique',
         componentProps: {
           disabled: isSystemField || isRevisedMode || isPublishedMode,
@@ -417,6 +465,24 @@ const [Modal, modalApi] = useVbenModal({
         componentProps: { disabled: isSystemField || isPublishedMode },
       },
       {
+        fieldName: 'listVisible',
+        componentProps: {
+          disabled:
+            isSystemField ||
+            !supportsListVisible(data?.dataType) ||
+            String(data?.code || '').toLowerCase() === 'id',
+        },
+      },
+      {
+        fieldName: 'searchable',
+        componentProps: {
+          disabled:
+            isSystemField ||
+            !supportsSearchable(data?.dataType) ||
+            String(data?.code || '').toLowerCase() === 'id',
+        },
+      },
+      {
         fieldName: 'remarks',
         componentProps: { disabled: isSystemField },
       },
@@ -427,7 +493,10 @@ const [Modal, modalApi] = useVbenModal({
       isMultiple: false,
       numberingSegmentId: null,
       dictCode: null,
+      isTitle: false,
+      listVisible: false,
       relatedDefinitionId: null,
+      searchable: false,
       ...data,
     });
   },
